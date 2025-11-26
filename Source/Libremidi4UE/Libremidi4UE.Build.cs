@@ -8,6 +8,9 @@ public class Libremidi4UE : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		
+		// libremidi requires C++20
+		CppStandard = CppStandardVersion.Cpp20;
+		
 		PublicIncludePaths.AddRange(
 			new string[] {
 				// ... add public include paths required here ...
@@ -26,9 +29,8 @@ public class Libremidi4UE : ModuleRules
 			new string[]
 			{
 				"Core",
-				"Libremidi4UELibrary",
+				"libremidi",
 				"Projects"
-				// ... add other public dependencies that you statically link with here ...
 			}
 			);
 			
