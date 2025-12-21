@@ -30,7 +30,8 @@ public class Libremidi4UE : ModuleRules
 			{
 				"Core",
 				"libremidi",
-				"Projects"
+				"Projects",
+				"WindowsMidiServices"
 			}
 			);
 			

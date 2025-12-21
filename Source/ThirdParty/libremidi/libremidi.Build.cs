@@ -19,15 +19,10 @@ public class libremidi : ModuleRules
 		// Enable header-only mode (recommended by libremidi documentation)
 		PublicDefinitions.Add("LIBREMIDI_HEADER_ONLY");
 		
-		// Enable MIDI 2.0 support (UMP - Universal MIDI Packet)
-		// Note: API is enabled, but MIDI 2.0 backend requires platform support
-		PublicDefinitions.Add("LIBREMIDI_ENABLE_MIDI2");
-		
 		// Platform-specific libraries and frameworks
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
 			// WinMM API (MIDI 1.0) - Windows XP+ compatible
-			// Currently the only enabled backend on Windows
 			PublicDefinitions.Add("LIBREMIDI_WINMM=1");
 			PublicSystemLibraries.Add("winmm.lib");
             PublicSystemIncludePaths.Add(Path.Combine(
@@ -37,23 +32,22 @@ public class libremidi : ModuleRules
 				"cppwinrt"));
 
 			// Windows MIDI Services (MIDI 2.0) - DISABLED
-			// Reason: Microsoft.Windows.Devices.Midi2.h header not found
-			// This requires Windows MIDI Services Developer Preview SDK
-			// Download from: https://github.com/microsoft/MIDI/releases/
-			// 
-			// To enable after SDK installation:
-			// 1. Uncomment the line below
-			// 2. Add C++/WinRT include paths if needed
-			// PublicDefinitions.Add("LIBREMIDI_WINMIDI=1");
+			// The MIDI SDK headers (generated with C++/WinRT v2.0.240405.15) are incompatible
+			// with Windows SDK 10.0.22621.0's C++/WinRT headers.
+			// To enable MIDI 2.0 support, regenerate MIDI SDK headers using the same 
+			// C++/WinRT version as the Windows SDK, or use the MIDI SDK's bundled NuGet package.
+			PublicDefinitions.Add("LIBREMIDI_WINMIDI=0");
 			
-			// Note: Application uses libremidi::API::WINDOWS_MM by default
-			// MIDI 2.0 API (send_ump) is available but will work through MIDI 1.0 translation
+			// MIDI 2.0 API support (UMP - Universal MIDI Packet) is disabled on Windows
+			// because WinMIDI backend is required for actual MIDI 2.0 hardware communication
+			// Note: We do NOT define LIBREMIDI_ENABLE_MIDI2 here to avoid WinMIDI backend compilation
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{
 			// CoreMIDI framework for macOS (MIDI 1.0 and 2.0)
 			// MIDI 2.0 requires macOS 11+
 			PublicDefinitions.Add("LIBREMIDI_COREMIDI=1");
+			PublicDefinitions.Add("LIBREMIDI_ENABLE_MIDI2");
 			PublicFrameworks.Add("CoreMIDI");
 			PublicFrameworks.Add("CoreAudio");
 			PublicFrameworks.Add("CoreFoundation");
@@ -63,6 +57,7 @@ public class libremidi : ModuleRules
 			// ALSA library for Linux (MIDI 1.0 and 2.0)
 			// MIDI 2.0 requires kernel 6.5+ and latest libasound
 			PublicDefinitions.Add("LIBREMIDI_ALSA=1");
+			PublicDefinitions.Add("LIBREMIDI_ENABLE_MIDI2");
 			PublicSystemLibraries.Add("asound");
 			PublicSystemLibraries.Add("pthread");
 		}

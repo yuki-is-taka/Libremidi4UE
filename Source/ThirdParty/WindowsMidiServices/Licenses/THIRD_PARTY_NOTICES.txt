@@ -1,0 +1,31 @@
+# Third Party Notices
+
+This directory contains Windows MIDI Services components that are subject to the following licenses:
+
+## Windows MIDI Services
+
+**Project:** Windows MIDI Services
+**License:** MIT License
+**Copyright:** Microsoft Corporation
+
+This project uses the Windows MIDI Services SDK and C++/WinRT projection headers.
+
+### Dependencies
+
+The Windows MIDI Services implementation may depend on the following Windows components:
+
+1. **Windows Runtime (WinRT)**
+   - Part of Windows OS
+   - Copyright Microsoft Corporation
+
+2. **C++/WinRT**
+   - MIT License
+   - Copyright Microsoft Corporation
+   - https://github.com/microsoft/cppwinrt
+
+For complete license information, see LICENSE.txt in this directory.
+
+## Attribution
+
+Windows MIDI Services is developed by Microsoft Corporation.
+For more information, visit: https://learn.microsoft.com/en-us/windows/uwp/audio-video-camera/midi
