@@ -1,4 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
+//
+// IMPORTANT: libremidi requires manual patching after submodule update.
+// File: libremidi/include/libremidi/backends/winmidi/helpers.hpp
+// Fix: Remove duplicate "using namespace Windows::Devices::Enumeration;" (without winrt:: prefix)
+// The line with "winrt::Windows::Devices::Enumeration" should remain.
 
 using System.IO;
 using UnrealBuildTool;
@@ -9,57 +14,53 @@ public class libremidi : ModuleRules
 	{
 		Type = ModuleType.External;
 		
-		// libremidi submodule
+		// libremidi requires C++20
+		CppStandard = CppStandardVersion.Cpp20;
+		
+		// libremidi submodule include path
 		string IncludePath = Path.Combine(ModuleDirectory, "libremidi", "include");
 		PublicSystemIncludePaths.Add(IncludePath);
-
-        // libremidi requires C++20
-        CppStandard = CppStandardVersion.Cpp20;
 		
 		// Enable header-only mode (recommended by libremidi documentation)
 		PublicDefinitions.Add("LIBREMIDI_HEADER_ONLY");
 		
-		// Platform-specific libraries and frameworks
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
-			// WinMM API (MIDI 1.0) - Windows XP+ compatible
-			PublicDefinitions.Add("LIBREMIDI_WINMM=1");
+			// MIDI 1.0: WinMM API
+			PublicDefinitions.Add("LIBREMIDI_WINMM");
 			PublicSystemLibraries.Add("winmm.lib");
-            PublicSystemIncludePaths.Add(Path.Combine(
+
+			// MIDI 2.0: Windows MIDI Services
+			PublicDefinitions.Add("LIBREMIDI_WINMIDI");
+			PublicDefinitions.Add("LIBREMIDI_ENABLE_MIDI2");
+			PublicSystemLibraries.Add("WindowsApp.lib");
+			
+			// Include order matters: MIDI SDK headers must come before Windows SDK C++/WinRT
+			string WindowsMidiServicesPath = Path.Combine(ModuleDirectory, "..", "WindowsMidiServices", "Win64", "include");
+			PublicSystemIncludePaths.Add(WindowsMidiServicesPath);
+			
+			string WindowsSdkCppWinRTPath = Path.Combine(
 				Target.WindowsPlatform.WindowsSdkDir,
 				"Include",
 				Target.WindowsPlatform.WindowsSdkVersion,
-				"cppwinrt"));
-
-			// Windows MIDI Services (MIDI 2.0) - DISABLED
-			// The MIDI SDK headers (generated with C++/WinRT v2.0.240405.15) are incompatible
-			// with Windows SDK 10.0.22621.0's C++/WinRT headers.
-			// To enable MIDI 2.0 support, regenerate MIDI SDK headers using the same 
-			// C++/WinRT version as the Windows SDK, or use the MIDI SDK's bundled NuGet package.
-			PublicDefinitions.Add("LIBREMIDI_WINMIDI=0");
+				"cppwinrt");
+			PublicSystemIncludePaths.Add(WindowsSdkCppWinRTPath);
 			
-			// MIDI 2.0 API support (UMP - Universal MIDI Packet) is disabled on Windows
-			// because WinMIDI backend is required for actual MIDI 2.0 hardware communication
-			// Note: We do NOT define LIBREMIDI_ENABLE_MIDI2 here to avoid WinMIDI backend compilation
+			PublicDependencyModuleNames.Add("WindowsMidiServices");
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{
-			// CoreMIDI framework for macOS (MIDI 1.0 and 2.0)
-			// MIDI 2.0 requires macOS 11+
-			PublicDefinitions.Add("LIBREMIDI_COREMIDI=1");
+			// MIDI 1.0 & 2.0: CoreMIDI (MIDI 2.0 requires macOS 11+)
+			PublicDefinitions.Add("LIBREMIDI_COREMIDI");
 			PublicDefinitions.Add("LIBREMIDI_ENABLE_MIDI2");
-			PublicFrameworks.Add("CoreMIDI");
-			PublicFrameworks.Add("CoreAudio");
-			PublicFrameworks.Add("CoreFoundation");
+			PublicFrameworks.AddRange(new string[] { "CoreMIDI", "CoreAudio", "CoreFoundation" });
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Linux)
 		{
-			// ALSA library for Linux (MIDI 1.0 and 2.0)
-			// MIDI 2.0 requires kernel 6.5+ and latest libasound
-			PublicDefinitions.Add("LIBREMIDI_ALSA=1");
+			// MIDI 1.0 & 2.0: ALSA (MIDI 2.0 requires kernel 6.5+)
+			PublicDefinitions.Add("LIBREMIDI_ALSA");
 			PublicDefinitions.Add("LIBREMIDI_ENABLE_MIDI2");
-			PublicSystemLibraries.Add("asound");
-			PublicSystemLibraries.Add("pthread");
+			PublicSystemLibraries.AddRange(new string[] { "asound", "pthread" });
 		}
 	}
 }
