@@ -18,6 +18,30 @@ void FLibremidi4UEModule::StartupModule()
 	
 	try
 	{
+		// 1) Available MIDI 1.0 APIs
+		UE_LOG(LogLibremidi4UE, Log, TEXT("=== MIDI 1.0 APIs ==="));
+		for (auto api : libremidi::available_apis())
+		{
+			FString apiName = UTF8_TO_TCHAR(libremidi::get_api_display_name(api).data());
+			UE_LOG(LogLibremidi4UE, Log, TEXT("  - %s (ID: %d)"), *apiName, static_cast<int>(api));
+		}
+
+		// 2) Available MIDI 2.0 (UMP) APIs
+		UE_LOG(LogLibremidi4UE, Log, TEXT("=== MIDI 2.0 (UMP) APIs ==="));
+		const auto umpApis = libremidi::available_ump_apis();
+		if (umpApis.empty())
+		{
+			UE_LOG(LogLibremidi4UE, Warning, TEXT("  No MIDI 2.0 APIs available!"));
+		}
+		else
+		{
+			for (auto api : umpApis)
+			{
+				FString apiName = UTF8_TO_TCHAR(libremidi::get_api_display_name(api).data());
+				UE_LOG(LogLibremidi4UE, Log, TEXT("  - %s (ID: %d)"), *apiName, static_cast<int>(api));
+			}
+		}
+
 		// Setup observer configuration with hot plug callbacks
 		libremidi::observer_configuration obs_conf;
 		
@@ -41,8 +65,27 @@ void FLibremidi4UEModule::StartupModule()
 			UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Output device disconnected - %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
 		};
 		
-		// Create the observer with the configured callbacks
-		MidiObserver = std::make_unique<libremidi::observer>(obs_conf);
+		// Create the observer with MIDI 2.0 API if available
+		if (!umpApis.empty())
+		{
+			// Use the first available MIDI 2.0 API (e.g., Windows MIDI Services)
+			MidiObserver = std::make_unique<libremidi::observer>(obs_conf, libremidi::observer_configuration_for(umpApis[0]));
+			UE_LOG(LogLibremidi4UE, Log, TEXT("Observer created with MIDI 2.0 API"));
+		}
+		else
+		{
+			// Fallback to default API
+			MidiObserver = std::make_unique<libremidi::observer>(obs_conf);
+			UE_LOG(LogLibremidi4UE, Warning, TEXT("Observer created with default API (MIDI 2.0 not available)"));
+		}
+
+		// 3) Current observer API and MIDI2 capability
+		libremidi::API currentApi = MidiObserver->get_current_api();
+		FString currentApiName = UTF8_TO_TCHAR(libremidi::get_api_display_name(currentApi).data());
+		const bool isMidi2 = libremidi::is_midi2(currentApi);
+		UE_LOG(LogLibremidi4UE, Log, TEXT("=== Current Observer API ==="));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  API: %s (ID: %d)"), *currentApiName, static_cast<int>(currentApi));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  MIDI 2.0 Support: %s"), isMidi2 ? TEXT("YES") : TEXT("NO"));
 		
 		std::vector<libremidi::input_port> input_ports = MidiObserver->get_input_ports();
 		UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Found %d MIDI input port(s)"), input_ports.size());
