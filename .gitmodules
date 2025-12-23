@@ -1,3 +1,0 @@
-[submodule "Source/ThirdParty/libremidi/libremidi"]
-	path = Source/ThirdParty/libremidi/libremidi
-	url = https://github.com/celtera/libremidi.git
