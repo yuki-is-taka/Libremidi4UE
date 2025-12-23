@@ -9,6 +9,91 @@
 
 #define LOCTEXT_NAMESPACE "FLibremidi4UEModule"
 
+namespace
+{
+	// Helper function to convert device_identifier to string
+	FString DeviceIdentifierToString(const libremidi::device_identifier& device)
+	{
+		if (std::holds_alternative<std::monostate>(device))
+		{
+			return TEXT("<none>");
+		}
+		else if (std::holds_alternative<std::string>(device))
+		{
+			return UTF8_TO_TCHAR(std::get<std::string>(device).c_str());
+		}
+		else if (std::holds_alternative<std::uint64_t>(device))
+		{
+			return FString::Printf(TEXT("0x%llX"), std::get<std::uint64_t>(device));
+		}
+		return TEXT("<unknown>");
+	}
+
+	// Helper function to convert container_identifier to string
+	FString ContainerIdentifierToString(const libremidi::container_identifier& container)
+	{
+		if (std::holds_alternative<std::monostate>(container))
+		{
+			return TEXT("<none>");
+		}
+		else if (std::holds_alternative<libremidi::uuid>(container))
+		{
+			const auto& uuid = std::get<libremidi::uuid>(container);
+			return FString::Printf(TEXT("{%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X}"),
+				uuid.bytes[0], uuid.bytes[1], uuid.bytes[2], uuid.bytes[3],
+				uuid.bytes[4], uuid.bytes[5],
+				uuid.bytes[6], uuid.bytes[7],
+				uuid.bytes[8], uuid.bytes[9],
+				uuid.bytes[10], uuid.bytes[11], uuid.bytes[12], uuid.bytes[13], uuid.bytes[14], uuid.bytes[15]);
+		}
+		else if (std::holds_alternative<std::string>(container))
+		{
+			return UTF8_TO_TCHAR(std::get<std::string>(container).c_str());
+		}
+		else if (std::holds_alternative<std::uint64_t>(container))
+		{
+			return FString::Printf(TEXT("0x%llX"), std::get<std::uint64_t>(container));
+		}
+		return TEXT("<unknown>");
+	}
+
+	// Helper function to convert port_type to string
+	FString PortTypeToString(libremidi::port_information::port_type type)
+	{
+		using pt = libremidi::port_information::port_type;
+		TArray<FString> types;
+
+		if (type == pt::unknown) return TEXT("Unknown");
+		if (type & pt::software) types.Add(TEXT("Software"));
+		if (type & pt::loopback) types.Add(TEXT("Loopback"));
+		if (type & pt::hardware) types.Add(TEXT("Hardware"));
+		if (type & pt::usb) types.Add(TEXT("USB"));
+		if (type & pt::bluetooth) types.Add(TEXT("Bluetooth"));
+		if (type & pt::pci) types.Add(TEXT("PCI"));
+		if (type & pt::network) types.Add(TEXT("Network"));
+
+		return types.Num() > 0 ? FString::Join(types, TEXT(" | ")) : TEXT("None");
+	}
+
+	// Helper function to log all port information
+	void LogPortInformation(const FString& EventType, const libremidi::port_information& port, bool bIsInput)
+	{
+		UE_LOG(LogLibremidi4UE, Log, TEXT("=== %s: %s Port ==="), *EventType, bIsInput ? TEXT("Input") : TEXT("Output"));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Display Name: %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Port Name: %s"), UTF8_TO_TCHAR(port.port_name.c_str()));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Device Name: %s"), 
+			port.device_name.empty() ? TEXT("<empty>") : UTF8_TO_TCHAR(port.device_name.c_str()));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Manufacturer: %s"), 
+			port.manufacturer.empty() ? TEXT("<empty>") : UTF8_TO_TCHAR(port.manufacturer.c_str()));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Client Handle: 0x%llX"), port.client);
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Port Handle: 0x%llX"), port.port);
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Container ID: %s"), *ContainerIdentifierToString(port.container));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Device ID: %s"), *DeviceIdentifierToString(port.device));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("  Port Type: %s"), *PortTypeToString(port.type));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("========================================"));
+	}
+}
+
 void FLibremidi4UEModule::StartupModule()
 {
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
@@ -47,22 +132,22 @@ void FLibremidi4UEModule::StartupModule()
 		
 		obs_conf.input_added = [this](const libremidi::input_port& port)
 		{
-			UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Input device connected - %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
+			LogPortInformation(TEXT("DEVICE CONNECTED"), port, true);
 		};
 		
 		obs_conf.input_removed = [this](const libremidi::input_port& port)
 		{
-			UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Input device disconnected - %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
+			LogPortInformation(TEXT("DEVICE DISCONNECTED"), port, true);
 		};
 
 		obs_conf.output_added = [this](const libremidi::output_port& port)
 		{
-			UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Output device connected - %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
+			LogPortInformation(TEXT("DEVICE CONNECTED"), port, false);
 		};
 		
 		obs_conf.output_removed = [this](const libremidi::output_port& port)
 		{
-			UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Output device disconnected - %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
+			LogPortInformation(TEXT("DEVICE DISCONNECTED"), port, false);
 		};
 		
 		// Create the observer with MIDI 2.0 API if available
@@ -87,23 +172,26 @@ void FLibremidi4UEModule::StartupModule()
 		UE_LOG(LogLibremidi4UE, Log, TEXT("  API: %s (ID: %d)"), *currentApiName, static_cast<int>(currentApi));
 		UE_LOG(LogLibremidi4UE, Log, TEXT("  MIDI 2.0 Support: %s"), isMidi2 ? TEXT("YES") : TEXT("NO"));
 		
+		// 4) Log all currently connected devices with full details
 		std::vector<libremidi::input_port> input_ports = MidiObserver->get_input_ports();
-		UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Found %d MIDI input port(s)"), input_ports.size());
+		UE_LOG(LogLibremidi4UE, Log, TEXT("=== Currently Connected Devices ==="));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("Found %d MIDI input port(s)"), input_ports.size());
 		
 		for (const libremidi::input_port& port : input_ports)
 		{
-			UE_LOG(LogLibremidi4UE, Log, TEXT("  - Input: %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
+			LogPortInformation(TEXT("EXISTING INPUT DEVICE"), port, true);
 		}
 		
 		std::vector<libremidi::output_port> output_ports = MidiObserver->get_output_ports();
-		UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: Found %d MIDI output port(s)"), output_ports.size());
+		UE_LOG(LogLibremidi4UE, Log, TEXT("Found %d MIDI output port(s)"), output_ports.size());
 		
 		for (const libremidi::output_port& port : output_ports)
 		{
-			UE_LOG(LogLibremidi4UE, Log, TEXT("  - Output: %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
+			LogPortInformation(TEXT("EXISTING OUTPUT DEVICE"), port, false);
 		}
 		
 		UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE: libremidi integration test successful!"));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("Hot-plug monitoring is now active. Connect/disconnect MIDI devices to see detailed logs."));
 	}
 	catch (const std::exception& e)
 	{
