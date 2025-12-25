@@ -75,6 +75,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Available Output Ports"))
 	TArray<FMidiPortInfo> GetAvailableOutputPorts() const;
 
+	// ============================================================================
+	// Port Management
+	// ============================================================================
+
+	/**
+	 * Get all active input ports
+	 * @return Array of active input ports
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Active Input Ports"))
+	TArray<ULibremidiInput*> GetActiveInputPorts() const;
+
+	/**
+	 * Get all active output ports
+	 * @return Array of active output ports
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Active Output Ports"))
+	TArray<ULibremidiOutput*> GetActiveOutputPorts() const;
+
+	/**
+	 * Find an active input port by port info
+	 * @param PortInfo The port info to search for
+	 * @return The active input port, or nullptr if not found
+	 */
+	ULibremidiInput* FindActiveInputPort(const FMidiPortInfo& PortInfo) const;
+
+	/**
+	 * Find an active output port by port info
+	 * @param PortInfo The port info to search for
+	 * @return The active output port, or nullptr if not found
+	 */
+	ULibremidiOutput* FindActiveOutputPort(const FMidiPortInfo& PortInfo) const;
+
 private:
 	TUniquePtr<libremidi::observer> Observer;
 
@@ -100,4 +132,43 @@ private:
 	void HandleInputDeviceRemoved(const libremidi::input_port& Port) const;
 	void HandleOutputDeviceAdded(const libremidi::output_port& Port) const;
 	void HandleOutputDeviceRemoved(const libremidi::output_port& Port) const;
+
+	// ============================================================================
+	// Internal Port Management
+	// ============================================================================
+
+	/**
+	 * Register an input port (called by ULibremidiInput)
+	 * @param Port The input port to register
+	 */
+	void RegisterInputPort(ULibremidiInput* Port);
+
+	/**
+	 * Unregister an input port (called by ULibremidiInput)
+	 * @param Port The input port to unregister
+	 */
+	void UnregisterInputPort(ULibremidiInput* Port);
+
+	/**
+	 * Register an output port (called by ULibremidiOutput)
+	 * @param Port The output port to register
+	 */
+	void RegisterOutputPort(ULibremidiOutput* Port);
+
+	/**
+	 * Unregister an output port (called by ULibremidiOutput)
+	 * @param Port The output port to unregister
+	 */
+	void UnregisterOutputPort(ULibremidiOutput* Port);
+
+	// Active ports (managed by GC via UPROPERTY)
+	UPROPERTY()
+	TArray<TObjectPtr<ULibremidiInput>> ActiveInputPorts;
+
+	UPROPERTY()
+	TArray<TObjectPtr<ULibremidiOutput>> ActiveOutputPorts;
+
+	// Friend classes for internal access
+	friend class ULibremidiInput;
+	friend class ULibremidiOutput;
 };

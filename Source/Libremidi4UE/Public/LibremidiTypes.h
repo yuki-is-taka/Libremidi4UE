@@ -30,7 +30,7 @@ enum class ELibremidiAPI : uint8
 };
 
 UENUM(BlueprintType, meta = (Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
-enum class EMidiPortType : uint8
+enum class ELibremidiPortType : uint8
 {
 	Unknown = 0 UMETA(DisplayName = "Unknown", ToolTip = "Unknown port type"),
 	Software = 1 UMETA(DisplayName = "Software (Virtual)", ToolTip = "Software virtual port created by applications"),
@@ -43,7 +43,7 @@ enum class EMidiPortType : uint8
 };
 
 UENUM(BlueprintType)
-enum class EMidiContainerType : uint8
+enum class ELibremidiContainerType : uint8
 {
 	None UMETA(DisplayName = "None", ToolTip = "No container information available"),
 	UUID UMETA(DisplayName = "UUID", ToolTip = "Container identified by UUID (e.g., WinMIDI ContainerID GUID)"),
@@ -52,11 +52,84 @@ enum class EMidiContainerType : uint8
 };
 
 UENUM(BlueprintType)
-enum class EMidiDeviceType : uint8
+enum class ELibremidiDeviceType : uint8
 {
 	None UMETA(DisplayName = "None", ToolTip = "No device information available"),
 	String UMETA(DisplayName = "String", ToolTip = "Device identified by string (e.g., WinMIDI EndpointDeviceId, ALSA sysfs path)"),
 	Integer UMETA(DisplayName = "Integer", ToolTip = "Device identified by integer (e.g., CoreMIDI USBVendorProduct)")
+};
+
+/**
+ * MIDI Message Type enum
+ */
+UENUM(BlueprintType)
+enum class ELibremidiMessageType : uint8
+{
+	NoteOff UMETA(DisplayName = "Note Off"),
+	NoteOn UMETA(DisplayName = "Note On"),
+	PolyPressure UMETA(DisplayName = "Poly Pressure (Aftertouch)"),
+	ControlChange UMETA(DisplayName = "Control Change"),
+	ProgramChange UMETA(DisplayName = "Program Change"),
+	ChannelPressure UMETA(DisplayName = "Channel Pressure (Aftertouch)"),
+	PitchBend UMETA(DisplayName = "Pitch Bend"),
+	SystemExclusive UMETA(DisplayName = "System Exclusive (SysEx)"),
+	SystemCommon UMETA(DisplayName = "System Common"),
+	SystemRealTime UMETA(DisplayName = "System Real-Time"),
+	Unknown UMETA(DisplayName = "Unknown")
+};
+
+/**
+ * Common MIDI Control Change numbers
+ */
+UENUM(BlueprintType)
+enum class ELibremidiControlChange : uint8
+{
+	BankSelect = 0 UMETA(DisplayName = "Bank Select"),
+	ModulationWheel = 1 UMETA(DisplayName = "Modulation Wheel"),
+	BreathController = 2 UMETA(DisplayName = "Breath Controller"),
+	FootController = 4 UMETA(DisplayName = "Foot Controller"),
+	PortamentoTime = 5 UMETA(DisplayName = "Portamento Time"),
+	DataEntry = 6 UMETA(DisplayName = "Data Entry (MSB)"),
+	Volume = 7 UMETA(DisplayName = "Volume"),
+	Balance = 8 UMETA(DisplayName = "Balance"),
+	Pan = 10 UMETA(DisplayName = "Pan"),
+	Expression = 11 UMETA(DisplayName = "Expression"),
+	EffectControl1 = 12 UMETA(DisplayName = "Effect Control 1"),
+	EffectControl2 = 13 UMETA(DisplayName = "Effect Control 2"),
+	GeneralPurpose1 = 16 UMETA(DisplayName = "General Purpose 1"),
+	GeneralPurpose2 = 17 UMETA(DisplayName = "General Purpose 2"),
+	GeneralPurpose3 = 18 UMETA(DisplayName = "General Purpose 3"),
+	GeneralPurpose4 = 19 UMETA(DisplayName = "General Purpose 4"),
+	Sustain = 64 UMETA(DisplayName = "Sustain Pedal"),
+	Portamento = 65 UMETA(DisplayName = "Portamento On/Off"),
+	Sostenuto = 66 UMETA(DisplayName = "Sostenuto Pedal"),
+	SoftPedal = 67 UMETA(DisplayName = "Soft Pedal"),
+	Legato = 68 UMETA(DisplayName = "Legato Footswitch"),
+	Hold2 = 69 UMETA(DisplayName = "Hold 2"),
+	SoundVariation = 70 UMETA(DisplayName = "Sound Variation"),
+	Timbre = 71 UMETA(DisplayName = "Timbre/Harmonic Intensity"),
+	ReleaseTime = 72 UMETA(DisplayName = "Release Time"),
+	AttackTime = 73 UMETA(DisplayName = "Attack Time"),
+	Brightness = 74 UMETA(DisplayName = "Brightness"),
+	DecayTime = 75 UMETA(DisplayName = "Decay Time"),
+	VibratoRate = 76 UMETA(DisplayName = "Vibrato Rate"),
+	VibratoDepth = 77 UMETA(DisplayName = "Vibrato Depth"),
+	VibratoDelay = 78 UMETA(DisplayName = "Vibrato Delay"),
+	ReverbLevel = 91 UMETA(DisplayName = "Reverb Level"),
+	TremoloLevel = 92 UMETA(DisplayName = "Tremolo Level"),
+	ChorusLevel = 93 UMETA(DisplayName = "Chorus Level"),
+	CelesteLevel = 94 UMETA(DisplayName = "Celeste (Detune) Level"),
+	PhaserLevel = 95 UMETA(DisplayName = "Phaser Level"),
+	DataIncrement = 96 UMETA(DisplayName = "Data Increment"),
+	DataDecrement = 97 UMETA(DisplayName = "Data Decrement"),
+	AllSoundOff = 120 UMETA(DisplayName = "All Sound Off"),
+	ResetAllControllers = 121 UMETA(DisplayName = "Reset All Controllers"),
+	LocalControl = 122 UMETA(DisplayName = "Local Control On/Off"),
+	AllNotesOff = 123 UMETA(DisplayName = "All Notes Off"),
+	OmniModeOff = 124 UMETA(DisplayName = "Omni Mode Off"),
+	OmniModeOn = 125 UMETA(DisplayName = "Omni Mode On"),
+	MonoModeOn = 126 UMETA(DisplayName = "Mono Mode On"),
+	PolyModeOn = 127 UMETA(DisplayName = "Poly Mode On")
 };
 
 USTRUCT(BlueprintType)
@@ -71,19 +144,19 @@ struct LIBREMIDI4UE_API FMidiPortInfo
 	int64 PortHandle = -1;
 
 	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container Type", ToolTip = "Type of container identifier"))
-	EMidiContainerType ContainerType = EMidiContainerType::None;
+	ELibremidiContainerType ContainerType = ELibremidiContainerType::None;
 
 	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container UUID", ToolTip = "Container UUID (WinMIDI ContainerID as hex string)"))
 	FString ContainerUUID;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container String", ToolTip = "Container string identifier (e.g., ALSA device ID path)"))
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container String", ToolTip = "Container string identifier (e.g., ALSA device ID)"))
 	FString ContainerString;
 
 	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container Integer", ToolTip = "Container integer identifier (e.g., CoreMIDI USBLocationID)"))
 	int64 ContainerInteger = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device Type", ToolTip = "Type of device identifier"))
-	EMidiDeviceType DeviceType = EMidiDeviceType::None;
+	ELibremidiDeviceType DeviceType = ELibremidiDeviceType::None;
 
 	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device String", ToolTip = "Device string identifier (e.g., WinMIDI EndpointDeviceId, ALSA sysfs path)"))
 	FString DeviceString;
@@ -104,7 +177,7 @@ struct LIBREMIDI4UE_API FMidiPortInfo
 	FString DisplayName;
 
 	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Port Type", ToolTip = "Type of MIDI port (USB, Bluetooth, etc.)"))
-	EMidiPortType PortType = EMidiPortType::Unknown;
+	ELibremidiPortType PortType = ELibremidiPortType::Unknown;
 
 	FMidiPortInfo() = default;
 
@@ -115,10 +188,25 @@ struct LIBREMIDI4UE_API FMidiPortInfo
 		, DeviceName(UTF8_TO_TCHAR(port.device_name.c_str()))
 		, PortName(UTF8_TO_TCHAR(port.port_name.c_str()))
 		, DisplayName(UTF8_TO_TCHAR(port.display_name.c_str()))
-		, PortType(static_cast<EMidiPortType>(port.type))
+		, PortType(static_cast<ELibremidiPortType>(port.type))
 	{
 		ParseContainerIdentifier(port.container);
 		ParseDeviceIdentifier(port.device);
+	}
+
+	bool operator==(const FMidiPortInfo& Other) const
+	{
+		return ClientHandle == Other.ClientHandle && PortHandle == Other.PortHandle;
+	}
+
+	bool operator!=(const FMidiPortInfo& Other) const
+	{
+		return !(*this == Other);
+	}
+
+	bool IsValid() const
+	{
+		return ClientHandle != -1 && PortHandle != -1;
 	}
 
 private:
@@ -126,23 +214,23 @@ private:
 	{
 		if (std::holds_alternative<libremidi::uuid>(Container))
 		{
-			ContainerType = EMidiContainerType::UUID;
+			ContainerType = ELibremidiContainerType::UUID;
 			const auto& UUID = std::get<libremidi::uuid>(Container);
 			ContainerUUID = BytesToHexString(UUID.bytes.data(), UUID.bytes.size());
 		}
 		else if (std::holds_alternative<std::string>(Container))
 		{
-			ContainerType = EMidiContainerType::String;
+			ContainerType = ELibremidiContainerType::String;
 			ContainerString = UTF8_TO_TCHAR(std::get<std::string>(Container).c_str());
 		}
 		else if (std::holds_alternative<std::uint64_t>(Container))
 		{
-			ContainerType = EMidiContainerType::Integer;
+			ContainerType = ELibremidiContainerType::Integer;
 			ContainerInteger = static_cast<int64>(std::get<std::uint64_t>(Container));
 		}
 		else
 		{
-			ContainerType = EMidiContainerType::None;
+			ContainerType = ELibremidiContainerType::None;
 		}
 	}
 
@@ -150,17 +238,17 @@ private:
 	{
 		if (std::holds_alternative<std::string>(Device))
 		{
-			DeviceType = EMidiDeviceType::String;
+			DeviceType = ELibremidiDeviceType::String;
 			DeviceString = UTF8_TO_TCHAR(std::get<std::string>(Device).c_str());
 		}
 		else if (std::holds_alternative<std::uint64_t>(Device))
 		{
-			DeviceType = EMidiDeviceType::Integer;
+			DeviceType = ELibremidiDeviceType::Integer;
 			DeviceInteger = static_cast<int64>(std::get<std::uint64_t>(Device));
 		}
 		else
 		{
-			DeviceType = EMidiDeviceType::None;
+			DeviceType = ELibremidiDeviceType::None;
 		}
 	}
 

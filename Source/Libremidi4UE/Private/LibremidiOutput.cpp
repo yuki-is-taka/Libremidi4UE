@@ -80,6 +80,14 @@ bool ULibremidiOutput::OpenPortInternal(const FMidiPortInfo& PortInfo, const FSt
 		return false;
 	}
 
+	// Check if port is already open by another instance
+	if (ULibremidiOutput* ExistingPort = Subsystem->FindActiveOutputPort(PortInfo))
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: Port '%s' is already open by another instance"), *PortInfo.DisplayName);
+		HandleError(FString::Printf(TEXT("Port '%s' is already open"), *PortInfo.DisplayName));
+		return false;
+	}
+
 	const ELibremidiAPI API = Subsystem->GetCurrentAPI();
 	if (!CreateMidiOut(bUseMidi2, LibremidiTypeConversion::ToLibremidiAPI(API)))
 	{
@@ -95,6 +103,8 @@ bool ULibremidiOutput::OpenPortInternal(const FMidiPortInfo& PortInfo, const FSt
 		MidiOut.Reset();
 		return false;
 	}
+
+	NotifyPortOpened(PortInfo, false);
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened port%s '%s' with API: %s"), 
 		bUseMidi2 ? TEXT(" (UMP)") : TEXT(""),
@@ -133,6 +143,11 @@ bool ULibremidiOutput::OpenVirtualPortInternal(const FString& PortName, bool bUs
 		MidiOut.Reset();
 		return false;
 	}
+
+	FMidiPortInfo VirtualPortInfo;
+	VirtualPortInfo.DisplayName = PortName;
+	VirtualPortInfo.PortName = PortName;
+	NotifyPortOpened(VirtualPortInfo, true);
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened virtual port%s '%s' with API: %s"), 
 		bUseMidi2 ? TEXT(" (UMP)") : TEXT(""),
@@ -173,6 +188,8 @@ bool ULibremidiOutput::ClosePort()
 		HandleError(TEXT("Failed to close port"));
 		return false;
 	}
+
+	NotifyPortClosed();
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Port closed"));
 	MidiOut.Reset();
@@ -265,5 +282,27 @@ void ULibremidiOutput::HandleError(const FString& ErrorMessage)
 			OnError.Broadcast(ErrorMessage);
 		}
 	});
+}
+
+void ULibremidiOutput::NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual)
+{
+	CurrentPortInfo = PortInfo;
+	bIsVirtualPort = bVirtual;
+
+	if (ULibremidiEngineSubsystem* Subsystem = GetSubsystem())
+	{
+		Subsystem->RegisterOutputPort(this);
+	}
+}
+
+void ULibremidiOutput::NotifyPortClosed()
+{
+	if (ULibremidiEngineSubsystem* Subsystem = GetSubsystem())
+	{
+		Subsystem->UnregisterOutputPort(this);
+	}
+
+	CurrentPortInfo = FMidiPortInfo();
+	bIsVirtualPort = false;
 }
 

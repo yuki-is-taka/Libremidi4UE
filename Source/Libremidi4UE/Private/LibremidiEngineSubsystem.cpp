@@ -1,4 +1,6 @@
 #include "LibremidiEngineSubsystem.h"
+#include "LibremidiInput.h"
+#include "LibremidiOutput.h"
 #include "LibremidiSettings.h"
 #include "Libremidi4UELog.h"
 
@@ -300,7 +302,10 @@ void ULibremidiEngineSubsystem::HandleError(std::string_view ErrorText, const li
 
 	AsyncTask(ENamedThreads::GameThread, [this, ErrorMessage, FileName, LineNumber]()
 	{
-		const_cast<ULibremidiEngineSubsystem*>(this)->OnError.Broadcast(ErrorMessage, FileName, LineNumber);
+		if (IsValid(this))
+		{
+			this->OnError.Broadcast(ErrorMessage, FileName, LineNumber);
+		}
 	});
 }
 
@@ -314,7 +319,10 @@ void ULibremidiEngineSubsystem::HandleWarning(std::string_view WarningText, cons
 
 	AsyncTask(ENamedThreads::GameThread, [this, WarningMessage, FileName, LineNumber]()
 	{
-		const_cast<ULibremidiEngineSubsystem*>(this)->OnWarning.Broadcast(WarningMessage, FileName, LineNumber);
+		if (IsValid(this))
+		{
+			this->OnWarning.Broadcast(WarningMessage, FileName, LineNumber);
+		}
 	});
 }
 
@@ -330,7 +338,10 @@ void ULibremidiEngineSubsystem::HandleInputDeviceAdded(const libremidi::input_po
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
 	{
-		const_cast<ULibremidiEngineSubsystem*>(this)->OnInputDeviceAdded.Broadcast(PortInfo);
+		if (IsValid(this))
+		{
+			this->OnInputDeviceAdded.Broadcast(PortInfo);
+		}
 	});
 }
 
@@ -344,7 +355,10 @@ void ULibremidiEngineSubsystem::HandleInputDeviceRemoved(const libremidi::input_
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
 	{
-		const_cast<ULibremidiEngineSubsystem*>(this)->OnInputDeviceRemoved.Broadcast(PortInfo);
+		if (IsValid(this))
+		{
+			this->OnInputDeviceRemoved.Broadcast(PortInfo);
+		}
 	});
 }
 
@@ -360,7 +374,10 @@ void ULibremidiEngineSubsystem::HandleOutputDeviceAdded(const libremidi::output_
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
 	{
-		const_cast<ULibremidiEngineSubsystem*>(this)->OnOutputDeviceAdded.Broadcast(PortInfo);
+		if (IsValid(this))
+		{
+			this->OnOutputDeviceAdded.Broadcast(PortInfo);
+		}
 	});
 }
 
@@ -374,6 +391,117 @@ void ULibremidiEngineSubsystem::HandleOutputDeviceRemoved(const libremidi::outpu
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
 	{
-		const_cast<ULibremidiEngineSubsystem*>(this)->OnOutputDeviceRemoved.Broadcast(PortInfo);
+		if (IsValid(this))
+		{
+			this->OnOutputDeviceRemoved.Broadcast(PortInfo);
+		}
 	});
+}
+
+// ============================================================================
+// Port Management
+// ============================================================================
+
+TArray<ULibremidiInput*> ULibremidiEngineSubsystem::GetActiveInputPorts() const
+{
+	TArray<ULibremidiInput*> Result;
+	for (ULibremidiInput* Port : ActiveInputPorts)
+	{
+		if (Port && Port->IsPortOpen())
+		{
+			Result.Add(Port);
+		}
+	}
+	return Result;
+}
+
+TArray<ULibremidiOutput*> ULibremidiEngineSubsystem::GetActiveOutputPorts() const
+{
+	TArray<ULibremidiOutput*> Result;
+	for (ULibremidiOutput* Port : ActiveOutputPorts)
+	{
+		if (Port && Port->IsPortOpen())
+		{
+			Result.Add(Port);
+		}
+	}
+	return Result;
+}
+
+ULibremidiInput* ULibremidiEngineSubsystem::FindActiveInputPort(const FMidiPortInfo& PortInfo) const
+{
+	if (!PortInfo.IsValid())
+	{
+		return nullptr;
+	}
+
+	for (ULibremidiInput* Port : ActiveInputPorts)
+	{
+		if (Port && Port->IsPortOpen())
+		{
+			const FMidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
+			if (CurrentInfo == PortInfo)
+			{
+				return Port;
+			}
+		}
+	}
+	return nullptr;
+}
+
+ULibremidiOutput* ULibremidiEngineSubsystem::FindActiveOutputPort(const FMidiPortInfo& PortInfo) const
+{
+	if (!PortInfo.IsValid())
+	{
+		return nullptr;
+	}
+
+	for (ULibremidiOutput* Port : ActiveOutputPorts)
+	{
+		if (Port && Port->IsPortOpen())
+		{
+			const FMidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
+			if (CurrentInfo == PortInfo)
+			{
+				return Port;
+			}
+		}
+	}
+	return nullptr;
+}
+
+void ULibremidiEngineSubsystem::RegisterInputPort(ULibremidiInput* Port)
+{
+	if (Port && !ActiveInputPorts.Contains(Port))
+	{
+		ActiveInputPorts.Add(Port);
+		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Registered input port: %s"), *Port->GetName());
+	}
+}
+
+void ULibremidiEngineSubsystem::UnregisterInputPort(ULibremidiInput* Port)
+{
+	if (Port)
+	{
+		ActiveInputPorts.Remove(Port);
+		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Unregistered input port: %s"), *Port->GetName());
+	}
+}
+
+void ULibremidiEngineSubsystem::RegisterOutputPort(ULibremidiOutput* Port)
+{
+	if (Port && !ActiveOutputPorts.Contains(Port))
+	{
+		ActiveOutputPorts.Add(Port);
+		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Registered output port: %s"), *Port->GetName());
+	}
+}
+
+void ULibremidiEngineSubsystem::UnregisterOutputPort(ULibremidiOutput* Port)
+{
+	if (Port)
+	{
+		ActiveOutputPorts.Remove(Port);
+		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Unregistered output port: %s"), *Port->GetName());
+	}
 }

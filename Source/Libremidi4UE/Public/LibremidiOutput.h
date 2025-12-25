@@ -125,9 +125,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "MIDI", meta = (DisplayName = "Is MIDI 2.0"))
 	bool IsMidi2() const { return bIsMidi2; }
 
+	/**
+	 * Get the current port info
+	 * @return The current port info
+	 */
+	const FMidiPortInfo& GetCurrentPortInfo() const { return CurrentPortInfo; }
+
 private:
 	TUniquePtr<libremidi::midi_out> MidiOut;
 	bool bIsMidi2 = false;
+	FMidiPortInfo CurrentPortInfo;
+	bool bIsVirtualPort = false;
 
 	/** Get the MIDI Engine Subsystem */
 	ULibremidiEngineSubsystem* GetSubsystem() const;
@@ -149,4 +157,10 @@ private:
 	
 	/** Handle errors */
 	void HandleError(const FString& ErrorMessage);
+
+	/** Notify subsystem that port was opened */
+	void NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual);
+
+	/** Notify subsystem that port was closed */
+	void NotifyPortClosed();
 };
