@@ -15,6 +15,9 @@ public class Libremidi4UE : ModuleRules
 			new string[]
 			{
 				"Core",
+				"CoreUObject",
+				"Engine",
+				"DeveloperSettings",
 				"libremidi",
 				"Projects"
 			}
