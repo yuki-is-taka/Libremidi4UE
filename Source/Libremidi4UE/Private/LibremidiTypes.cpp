@@ -1,5 +1,75 @@
 #include "LibremidiTypes.h"
 
+// FMidiPortInfo implementation
+
+FMidiPortInfo::FMidiPortInfo(const libremidi::port_information& InPort)
+	: ClientHandle(static_cast<int64>(InPort.client))
+	, PortHandle(static_cast<int64>(InPort.port))
+	, Manufacturer(UTF8_TO_TCHAR(InPort.manufacturer.c_str()))
+	, DeviceName(UTF8_TO_TCHAR(InPort.device_name.c_str()))
+	, PortName(UTF8_TO_TCHAR(InPort.port_name.c_str()))
+	, DisplayName(UTF8_TO_TCHAR(InPort.display_name.c_str()))
+	, PortType(static_cast<ELibremidiPortType>(InPort.type))
+{
+	ParseContainerIdentifier(InPort.container);
+	ParseDeviceIdentifier(InPort.device);
+}
+
+void FMidiPortInfo::ParseContainerIdentifier(const libremidi::container_identifier& Container)
+{
+	if (std::holds_alternative<libremidi::uuid>(Container))
+	{
+		ContainerType = ELibremidiContainerType::UUID;
+		const auto& UUID = std::get<libremidi::uuid>(Container);
+		ContainerUUID = BytesToHexString(UUID.bytes.data(), UUID.bytes.size());
+	}
+	else if (std::holds_alternative<std::string>(Container))
+	{
+		ContainerType = ELibremidiContainerType::String;
+		ContainerString = UTF8_TO_TCHAR(std::get<std::string>(Container).c_str());
+	}
+	else if (std::holds_alternative<std::uint64_t>(Container))
+	{
+		ContainerType = ELibremidiContainerType::Integer;
+		ContainerInteger = static_cast<int64>(std::get<std::uint64_t>(Container));
+	}
+	else
+	{
+		ContainerType = ELibremidiContainerType::None;
+	}
+}
+
+void FMidiPortInfo::ParseDeviceIdentifier(const libremidi::device_identifier& Device)
+{
+	if (std::holds_alternative<std::string>(Device))
+	{
+		DeviceType = ELibremidiDeviceType::String;
+		DeviceString = UTF8_TO_TCHAR(std::get<std::string>(Device).c_str());
+	}
+	else if (std::holds_alternative<std::uint64_t>(Device))
+	{
+		DeviceType = ELibremidiDeviceType::Integer;
+		DeviceInteger = static_cast<int64>(std::get<std::uint64_t>(Device));
+	}
+	else
+	{
+		DeviceType = ELibremidiDeviceType::None;
+	}
+}
+
+FString FMidiPortInfo::BytesToHexString(const uint8_t* Bytes, size_t Length)
+{
+	FString Result;
+	Result.Reserve(static_cast<int32>(Length * 2));
+	for (size_t i = 0; i < Length; ++i)
+	{
+		Result += FString::Printf(TEXT("%02X"), Bytes[i]);
+	}
+	return Result;
+}
+
+// API conversion implementation
+
 namespace LibremidiTypeConversion
 {
 	libremidi::API ToLibremidiAPI(ELibremidiAPI API)

@@ -12,13 +12,71 @@ THIRD_PARTY_INCLUDES_END
 
 class ULibremidiEngineSubsystem;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnMidiMessage, const TArray<uint8>&, Data, int64, Timestamp);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnMidiMessageUMP, const TArray<uint32>&, Data, int64, Timestamp);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiInputError, const FString&, ErrorMessage);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnLibremidiNoteOn, ULibremidiInput*, Source, int32, Channel, int32, Note, float, Velocity, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnLibremidiNoteOff, ULibremidiInput*, Source, int32, Channel, int32, Note, float, Velocity, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnLibremidiControlChange, ULibremidiInput*, Source, int32, Channel, int32, Controller, float, Value, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnLibremidiProgramChange, ULibremidiInput*, Source, int32, Channel, int32, Program, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnLibremidiPitchBend, ULibremidiInput*, Source, int32, Channel, float, Value, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnLibremidiChannelPressure, ULibremidiInput*, Source, int32, Channel, float, Pressure, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnLibremidiPolyPressure, ULibremidiInput*, Source, int32, Channel, int32, Note, float, Pressure, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnLibremidiSysEx, ULibremidiInput*, Source, const TArray<uint8>&, Data, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnLibremidiSongPosition, ULibremidiInput*, Source, int32, Beats, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnLibremidiSongSelect, ULibremidiInput*, Source, int32, Song, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLibremidiClock, ULibremidiInput*, Source, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLibremidiStart, ULibremidiInput*, Source, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLibremidiContinue, ULibremidiInput*, Source, int64, Timestamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLibremidiStop, ULibremidiInput*, Source, int64, Timestamp);
+
 /**
- * MIDI Input class for receiving MIDI 1.0 and MIDI 2.0 (UMP) messages
- * Supports both hardware and virtual ports
+ * MIDI Input handler for receiving MIDI 1.0 and MIDI 2.0 (UMP) messages.
+ * 
+ * ## Unified High-Resolution Processing
+ * This class ALWAYS processes MIDI data as high-resolution UMP (MIDI 2.0) format internally,
+ * regardless of the port type. libremidi automatically handles format conversion:
+ * 
+ * - **MIDI 1.0 port**: 7-bit data is automatically upconverted to 16-bit/32-bit
+ * - **MIDI 2.0 port**: Native high-resolution data is preserved
+ * 
+ * ## Data Normalization (Output)
+ * All continuous MIDI values are normalized to float for consistent Blueprint/C++ handling:
+ * - **Velocity**: 16-bit (0-65535) ? float 0.0-1.0
+ * - **Control Change**: 32-bit (0-4.2B) ? float 0.0-1.0
+ * - **Pressure**: 32-bit (0-4.2B) ? float 0.0-1.0
+ * - **Pitch Bend**: 32-bit signed ? float -1.0 to 1.0
+ * 
+ * ## Automatic Format Conversion
+ * Thanks to libremidi's automatic conversion:
+ * - MIDI 1.0 ports automatically upconvert to high-resolution UMP
+ * - MIDI 2.0 ports provide native high-resolution data
+ * - Your code always receives consistent normalized float values
+ * 
+ * ## Thread Safety
+ * All delegate broadcasts are automatically dispatched to the game thread via AsyncTask.
+ * MIDI messages are received on a background thread and safely marshaled to Blueprint.
+ * 
+ * ## SysEx Handling
+ * - Multi-packet SysEx is automatically buffered and concatenated
+ * - F0/F7 framing bytes are automatically stripped
+ * 
+ * ## Usage Example
+ * ```cpp
+ * // C++
+ * ULibremidiInput* Input = ULibremidiInput::CreateMidiInput(this);
+ * Input->OnNoteOn.AddDynamic(this, &AMyActor::HandleNoteOn);
+ * Input->OpenPort(PortInfo);  // Works with both MIDI 1.0 and 2.0 ports
+ * 
+ * void AMyActor::HandleNoteOn(ULibremidiInput* Source, int32 Channel, int32 Note, float Velocity, int64 Timestamp)
+ * {
+ *     // Velocity is always normalized 0.0-1.0, regardless of port type
+ *     float Volume = Velocity * MaxVolume;
+ * }
+ * ```
+ * 
+ * @see ULibremidiEngineSubsystem for port enumeration and global MIDI API selection
+ * @see ULibremidiOutput for sending MIDI messages with automatic normalization
  */
 UCLASS(BlueprintType, Category = "MIDI")
 class LIBREMIDI4UE_API ULibremidiInput : public UObject
@@ -30,140 +88,184 @@ public:
 	virtual ~ULibremidiInput();
 	virtual void BeginDestroy() override;
 
-	/** MIDI 1.0 Message Event */
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiMessage OnMidiMessage;
-
-	/** MIDI 2.0 (UMP) Message Event - C++ only */
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events", meta = (BlueprintInternalUseOnly = "true"))
-	FOnMidiMessageUMP OnMidiMessageUMP;
-
-	/** Error Event */
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiInputError OnError;
+	// ============================================================================
+	// Raw MIDI Message Events
+	// ============================================================================
 
 	/**
-	 * Create a new MIDI Input instance
+	 * Raw MIDI 2.0 (UMP) message event (32-bit data).
+	 * Provides unprocessed UMP stream for custom parsing or logging.
+	 * For most use cases, prefer the typed events (OnNoteOn, OnControlChange, etc.).
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Raw", meta = (BlueprintInternalUseOnly = "true"))
+	FOnMidiMessageUMP OnMidiMessageUMP;
+
+	/** MIDI input error event */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|System")
+	FOnMidiInputError OnError;
+
+	// ============================================================================
+	// Typed MIDI Message Events (Normalized Values)
+	// ============================================================================
+
+	/**
+	 * Note On event.
+	 * @param Velocity Normalized velocity (0.0 = silent, 1.0 = maximum)
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Note")
+	FOnLibremidiNoteOn OnNoteOn;
+
+	/**
+	 * Note Off event.
+	 * @param Velocity Normalized release velocity (0.0 to 1.0)
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Note")
+	FOnLibremidiNoteOff OnNoteOff;
+
+	/**
+	 * Control Change event.
+	 * @param Value Normalized control value (0.0 to 1.0)
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Control")
+	FOnLibremidiControlChange OnControlChange;
+
+	/** Program Change event (instrument/patch selection) */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Control")
+	FOnLibremidiProgramChange OnProgramChange;
+
+	/**
+	 * Pitch Bend event.
+	 * @param Value Normalized pitch bend (-1.0 = down, 0.0 = center, 1.0 = up)
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Control")
+	FOnLibremidiPitchBend OnPitchBend;
+
+	/**
+	 * Channel Pressure (Aftertouch) event.
+	 * @param Pressure Normalized pressure (0.0 to 1.0)
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Control")
+	FOnLibremidiChannelPressure OnChannelPressure;
+
+	/**
+	 * Polyphonic Key Pressure (Per-note aftertouch) event.
+	 * @param Pressure Normalized pressure (0.0 to 1.0)
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Control")
+	FOnLibremidiPolyPressure OnPolyPressure;
+
+	/**
+	 * System Exclusive event.
+	 * F0/F7 framing bytes are automatically removed.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|System")
+	FOnLibremidiSysEx OnSysEx;
+
+	/** Song Position Pointer event (MIDI synchronization) */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|System")
+	FOnLibremidiSongPosition OnSongPosition;
+
+	/** Song Select event (MIDI synchronization) */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|System")
+	FOnLibremidiSongSelect OnSongSelect;
+
+	/** MIDI Clock event (timing synchronization, 24 ppqn) */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Timing")
+	FOnLibremidiClock OnMidiClock;
+
+	/** MIDI Start event (begin playback) */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Timing")
+	FOnLibremidiStart OnMidiStart;
+
+	/** MIDI Continue event (resume playback) */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Timing")
+	FOnLibremidiContinue OnMidiContinue;
+
+	/** MIDI Stop event (halt playback) */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|Timing")
+	FOnLibremidiStop OnMidiStop;
+
+	// ============================================================================
+	// Port Management
+	// ============================================================================
+
+	/**
+	 * Create a new MIDI Input instance.
 	 * @param WorldContextObject Context object (typically 'this' from the caller)
-	 * @return New MIDI Input instance
+	 * @return New MIDI Input instance, or nullptr on failure
 	 */
 	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Create MIDI Input", WorldContext = "WorldContextObject"))
 	static ULibremidiInput* CreateMidiInput(UObject* WorldContextObject);
 
 	/**
-	 * Open a MIDI input port (MIDI 1.0)
-	 * @param PortInfo The port to open
-	 * @param ClientName Optional client name
-	 * @return True if the port was opened successfully
+	 * Open a hardware MIDI input port.
+	 * Port type is automatically detected and data is always processed as UMP internally.
+	 * @param PortInfo Port information obtained from LibremidiEngineSubsystem
+	 * @param ClientName Optional client name visible to other MIDI applications
+	 * @return True if port opened successfully
 	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Port (MIDI 1.0)"))
+	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Port"))
 	bool OpenPort(const FMidiPortInfo& PortInfo, const FString& ClientName = TEXT("Unreal Engine MIDI Input"));
 
 	/**
-	 * Open a MIDI input port (MIDI 2.0 UMP)
-	 * @param PortInfo The port to open
-	 * @param ClientName Optional client name
-	 * @return True if the port was opened successfully
+	 * Create and open a virtual MIDI input port.
+	 * Data is always processed as UMP internally.
+	 * @param PortName Name of the virtual port
+	 * @return True if virtual port created successfully
 	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Port (MIDI 2.0 UMP)"))
-	bool OpenPortUMP(const FMidiPortInfo& PortInfo, const FString& ClientName = TEXT("Unreal Engine MIDI Input"));
-
-	/**
-	 * Open a virtual MIDI input port (MIDI 1.0)
-	 * @param PortName The name for the virtual port
-	 * @return True if the port was opened successfully
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Virtual Port (MIDI 1.0)"))
+	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Virtual Port"))
 	bool OpenVirtualPort(const FString& PortName);
 
 	/**
-	 * Open a virtual MIDI input port (MIDI 2.0 UMP)
-	 * @param PortName The name for the virtual port
-	 * @return True if the port was opened successfully
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Virtual Port (MIDI 2.0 UMP)"))
-	bool OpenVirtualPortUMP(const FString& PortName);
-
-	/**
-	 * Close the currently open port
-	 * @return True if the port was closed successfully
+	 * Close the currently open port.
+	 * @return True if port was closed successfully
 	 */
 	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Close Port"))
 	bool ClosePort();
 
-	/**
-	 * Check if a port is currently open
-	 * @return True if a port is open
-	 */
+	// ============================================================================
+	// Port Status
+	// ============================================================================
+
+	/** Check if a port is currently open */
 	UFUNCTION(BlueprintPure, Category = "MIDI", meta = (DisplayName = "Is Port Open"))
 	bool IsPortOpen() const;
 
-	/**
-	 * Check if the port is connected
-	 * @return True if the port is connected
-	 */
+	/** Check if the port is connected (hardware may be disconnected even if port is open) */
 	UFUNCTION(BlueprintPure, Category = "MIDI", meta = (DisplayName = "Is Port Connected"))
 	bool IsPortConnected() const;
 
-	/**
-	 * Get the current MIDI API being used
-	 * @return The current API
-	 */
+	/** Get the current MIDI API being used (Windows: WinMM/MIDI2, Mac: CoreMIDI, Linux: ALSA/JACK) */
 	UFUNCTION(BlueprintPure, Category = "MIDI", meta = (DisplayName = "Get Current API"))
 	ELibremidiAPI GetCurrentAPI() const;
 
-	/**
-	 * Check if this input is using MIDI 2.0 (UMP)
-	 * @return True if using MIDI 2.0
-	 */
-	UFUNCTION(BlueprintPure, Category = "MIDI", meta = (DisplayName = "Is MIDI 2.0"))
-	bool IsMidi2() const { return bIsMidi2; }
-
-	/**
-	 * Get the current port info
-	 * @return The current port info
-	 */
+	/** Get information about the currently open port */
 	const FMidiPortInfo& GetCurrentPortInfo() const { return CurrentPortInfo; }
 
 private:
 	TUniquePtr<libremidi::midi_in> MidiIn;
-	bool bIsMidi2 = false;
 	FMidiPortInfo CurrentPortInfo;
 	bool bIsVirtualPort = false;
 
-	/** Get the MIDI Engine Subsystem */
-	ULibremidiEngineSubsystem* GetSubsystem() const;
-	
-	/** Convert FMidiPortInfo to libremidi::input_port */
-	libremidi::input_port ConvertPortInfo(const FMidiPortInfo& PortInfo) const;
-	
-	/** Create MIDI input instance (MIDI 1.0 or 2.0) */
-	bool CreateMidiIn(bool bUseMidi2, libremidi::API API);
-	
-	/** Common port opening logic */
-	bool OpenPortInternal(const FMidiPortInfo& PortInfo, const FString& ClientName, bool bUseMidi2);
-	
-	/** Common virtual port opening logic */
-	bool OpenVirtualPortInternal(const FString& PortName, bool bUseMidi2);
+	TArray<uint8> UMPSysExBuffer;
+	bool bUMPSysExInProgress = false;
+	int64 UMPSysExStartTimestamp = 0;
 
-	/** Create MIDI 1.0 input configuration */
-	libremidi::input_configuration CreateInputConfiguration();
-	
-	/** Create MIDI 2.0 (UMP) input configuration */
+	ULibremidiEngineSubsystem* GetSubsystem() const;
+	libremidi::input_port ConvertPortInfo(const FMidiPortInfo& PortInfo) const;
+	bool CreateMidiIn(libremidi::API API);
+
 	libremidi::ump_input_configuration CreateInputConfigurationUMP();
 	
-	/** Handle incoming MIDI 1.0 messages */
-	void HandleMidiMessage(libremidi::message&& Message);
-	
-	/** Handle incoming MIDI 2.0 (UMP) messages */
 	void HandleMidiMessageUMP(libremidi::ump&& Message);
-	
-	/** Handle errors */
 	void HandleError(const FString& ErrorMessage);
 
-	/** Notify subsystem that port was opened */
 	void NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual);
-
-	/** Notify subsystem that port was closed */
 	void NotifyPortClosed();
+
+	void ParseAndBroadcastUMP(const TArray<uint32>& Data, int64 Timestamp);
+	void ParseAndBroadcastUMPSystem(const TArray<uint32>& Data, int64 Timestamp);
+	void ParseAndBroadcastUMPMidi1(const TArray<uint32>& Data, int64 Timestamp);
+	void ParseAndBroadcastUMPMidi2(const TArray<uint32>& Data, int64 Timestamp);
+	void ParseAndBroadcastUMPSysEx(const TArray<uint32>& Data, int64 Timestamp);
 };

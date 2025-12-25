@@ -46,7 +46,7 @@ void ULibremidiEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	const ULibremidiSettings* Settings = GetDefault<ULibremidiSettings>();
 	if (Settings)
 	{
-		MidiAPI = Settings->BackendAPI;
+		MidiAPI = Settings->GetBackendAPI();  // ? Getter???Enum???
 		bTrackHardware = Settings->bTrackHardware;
 		bTrackVirtual = Settings->bTrackVirtual;
 		bTrackAny = Settings->bTrackAny;
@@ -289,7 +289,21 @@ libremidi::observer_configuration ULibremidiEngineSubsystem::CreateObserverConfi
 
 libremidi::observer_api_configuration ULibremidiEngineSubsystem::CreateObserverAPIConfiguration() const
 {
-	return LibremidiTypeConversion::ToLibremidiAPI(MidiAPI);
+	// Get the preferred API (respects manual selection or auto-selects with UMP priority)
+	ELibremidiAPI PreferredAPI = ULibremidiSettings::GetPreferredAPI(MidiAPI);
+	
+	// Log the selection strategy
+	if (MidiAPI == ELibremidiAPI::Unspecified)
+	{
+		UE_LOG(LogLibremidi4UE, Log, TEXT("API Selection: Auto (Unspecified) - Preferring MIDI 2.0 UMP APIs"));
+	}
+	else
+	{
+		FString APIName = UEnum::GetValueAsString(MidiAPI);
+		UE_LOG(LogLibremidi4UE, Log, TEXT("API Selection: Manual (%s)"), *APIName);
+	}
+	
+	return LibremidiTypeConversion::ToLibremidiAPI(PreferredAPI);
 }
 
 void ULibremidiEngineSubsystem::HandleError(std::string_view ErrorText, const libremidi::source_location& Location) const

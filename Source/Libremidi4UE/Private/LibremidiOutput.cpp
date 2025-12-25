@@ -1,5 +1,28 @@
+/**
+ * @file LibremidiOutput.cpp
+ * @brief MIDI Output implementation with unified UMP processing
+ * 
+ * ## Unified High-Resolution Processing
+ * This implementation ALWAYS sends MIDI data as UMP (MIDI 2.0) format internally.
+ * libremidi automatically handles format conversion:
+ * 
+ * - **MIDI 1.0 devices**: High-resolution data is automatically downsampled (16-bit ? 7-bit)
+ * - **MIDI 2.0 devices**: Native high-resolution data is preserved
+ * 
+ * ## Data Conversion
+ * Normalized float values are converted to high-resolution MIDI 2.0:
+ * - Velocity: float 0.0-1.0 ? uint16 (0-65535)
+ * - Control Change / Pressure: float 0.0-1.0 ? uint32 (0-4294967295)
+ * - Pitch Bend: float -1.0-1.0 ? int32 (-2147483648 to 2147483647)
+ * 
+ * ## Thread Safety
+ * Send operations are thread-safe and can be called from any thread.
+ * Error broadcasts are dispatched to the game thread via AsyncTask.
+ */
+
 #include "LibremidiOutput.h"
 #include "LibremidiEngineSubsystem.h"
+#include "LibremidiCommon.h"
 #include "Libremidi4UELog.h"
 #include "Engine/Engine.h"
 
@@ -8,7 +31,6 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 
 ULibremidiOutput::ULibremidiOutput()
-	: bIsMidi2(false)
 {
 }
 
@@ -33,43 +55,38 @@ ULibremidiOutput* ULibremidiOutput::CreateMidiOutput(UObject* WorldContextObject
 
 ULibremidiEngineSubsystem* ULibremidiOutput::GetSubsystem() const
 {
-	return GEngine ? GEngine->GetEngineSubsystem<ULibremidiEngineSubsystem>() : nullptr;
+	return UE::MIDI::Private::GetEngineSubsystem();
 }
 
 libremidi::output_port ULibremidiOutput::ConvertPortInfo(const FMidiPortInfo& PortInfo) const
 {
-	libremidi::output_port Port;
-	Port.client = static_cast<std::uintptr_t>(PortInfo.ClientHandle);
-	Port.port = static_cast<uint32_t>(PortInfo.PortHandle);
-	Port.display_name = TCHAR_TO_UTF8(*PortInfo.DisplayName);
-	Port.port_name = TCHAR_TO_UTF8(*PortInfo.PortName);
-	Port.device_name = TCHAR_TO_UTF8(*PortInfo.DeviceName);
-	Port.manufacturer = TCHAR_TO_UTF8(*PortInfo.Manufacturer);
-	return Port;
+	return UE::MIDI::Private::ToLibremidiOutputPort(PortInfo);
 }
 
-bool ULibremidiOutput::CreateMidiOut(bool bUseMidi2, libremidi::API API)
+bool ULibremidiOutput::CreateMidiOut(libremidi::API API)
 {
 	try
 	{
 		MidiOut = MakeUnique<libremidi::midi_out>(CreateOutputConfiguration(), API);
-		bIsMidi2 = bUseMidi2;
+		
+		if (MidiOut)
+		{
+			UE::MIDI::Private::LogBackendType(MidiOut->get_current_api(), false);
+		}
+		
 		return true;
 	}
 	catch (const std::exception& e)
 	{
-		HandleError(FString::Printf(TEXT("Failed to create MIDI output%s: %s"), 
-			bUseMidi2 ? TEXT(" (UMP)") : TEXT(""), 
-			UTF8_TO_TCHAR(e.what())));
+		HandleError(FString::Printf(TEXT("Failed to create MIDI output: %s"), UTF8_TO_TCHAR(e.what())));
 		return false;
 	}
 }
 
-bool ULibremidiOutput::OpenPortInternal(const FMidiPortInfo& PortInfo, const FString& ClientName, bool bUseMidi2)
+bool ULibremidiOutput::OpenPort(const FMidiPortInfo& PortInfo, const FString& ClientName)
 {
-	if (MidiOut && MidiOut->is_port_open())
+	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: A port is already open. Close it first."));
 		return false;
 	}
 
@@ -80,7 +97,6 @@ bool ULibremidiOutput::OpenPortInternal(const FMidiPortInfo& PortInfo, const FSt
 		return false;
 	}
 
-	// Check if port is already open by another instance
 	if (ULibremidiOutput* ExistingPort = Subsystem->FindActiveOutputPort(PortInfo))
 	{
 		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: Port '%s' is already open by another instance"), *PortInfo.DisplayName);
@@ -89,7 +105,7 @@ bool ULibremidiOutput::OpenPortInternal(const FMidiPortInfo& PortInfo, const FSt
 	}
 
 	const ELibremidiAPI API = Subsystem->GetCurrentAPI();
-	if (!CreateMidiOut(bUseMidi2, LibremidiTypeConversion::ToLibremidiAPI(API)))
+	if (!CreateMidiOut(LibremidiTypeConversion::ToLibremidiAPI(API)))
 	{
 		return false;
 	}
@@ -97,27 +113,23 @@ bool ULibremidiOutput::OpenPortInternal(const FMidiPortInfo& PortInfo, const FSt
 	if (const auto Error = MidiOut->open_port(ConvertPortInfo(PortInfo), TCHAR_TO_UTF8(*ClientName)); 
 		Error != stdx::error{})
 	{
-		HandleError(FString::Printf(TEXT("Failed to open port%s '%s'"), 
-			bUseMidi2 ? TEXT(" (UMP)") : TEXT(""), 
-			*PortInfo.DisplayName));
+		HandleError(FString::Printf(TEXT("Failed to open port '%s'"), *PortInfo.DisplayName));
 		MidiOut.Reset();
 		return false;
 	}
 
 	NotifyPortOpened(PortInfo, false);
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened port%s '%s' with API: %s"), 
-		bUseMidi2 ? TEXT(" (UMP)") : TEXT(""),
+	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened port '%s' with API: %s (UMP processing)"), 
 		*PortInfo.DisplayName, 
 		*UEnum::GetValueAsString(API));
 	return true;
 }
 
-bool ULibremidiOutput::OpenVirtualPortInternal(const FString& PortName, bool bUseMidi2)
+bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 {
-	if (MidiOut && MidiOut->is_port_open())
+	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: A port is already open. Close it first."));
 		return false;
 	}
 
@@ -129,7 +141,7 @@ bool ULibremidiOutput::OpenVirtualPortInternal(const FString& PortName, bool bUs
 	}
 
 	const ELibremidiAPI API = Subsystem->GetCurrentAPI();
-	if (!CreateMidiOut(bUseMidi2, LibremidiTypeConversion::ToLibremidiAPI(API)))
+	if (!CreateMidiOut(LibremidiTypeConversion::ToLibremidiAPI(API)))
 	{
 		return false;
 	}
@@ -137,9 +149,7 @@ bool ULibremidiOutput::OpenVirtualPortInternal(const FString& PortName, bool bUs
 	if (const auto Error = MidiOut->open_virtual_port(TCHAR_TO_UTF8(*PortName)); 
 		Error != stdx::error{})
 	{
-		HandleError(FString::Printf(TEXT("Failed to open virtual port%s '%s'"), 
-			bUseMidi2 ? TEXT(" (UMP)") : TEXT(""), 
-			*PortName));
+		HandleError(FString::Printf(TEXT("Failed to open virtual port '%s'"), *PortName));
 		MidiOut.Reset();
 		return false;
 	}
@@ -149,31 +159,10 @@ bool ULibremidiOutput::OpenVirtualPortInternal(const FString& PortName, bool bUs
 	VirtualPortInfo.PortName = PortName;
 	NotifyPortOpened(VirtualPortInfo, true);
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened virtual port%s '%s' with API: %s"), 
-		bUseMidi2 ? TEXT(" (UMP)") : TEXT(""),
+	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened virtual port '%s' with API: %s (UMP processing)"), 
 		*PortName, 
 		*UEnum::GetValueAsString(API));
 	return true;
-}
-
-bool ULibremidiOutput::OpenPort(const FMidiPortInfo& PortInfo, const FString& ClientName)
-{
-	return OpenPortInternal(PortInfo, ClientName, false);
-}
-
-bool ULibremidiOutput::OpenPortUMP(const FMidiPortInfo& PortInfo, const FString& ClientName)
-{
-	return OpenPortInternal(PortInfo, ClientName, true);
-}
-
-bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
-{
-	return OpenVirtualPortInternal(PortName, false);
-}
-
-bool ULibremidiOutput::OpenVirtualPortUMP(const FString& PortName)
-{
-	return OpenVirtualPortInternal(PortName, true);
 }
 
 bool ULibremidiOutput::ClosePort()
@@ -193,7 +182,6 @@ bool ULibremidiOutput::ClosePort()
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Port closed"));
 	MidiOut.Reset();
-	bIsMidi2 = false;
 	return true;
 }
 
@@ -273,15 +261,7 @@ libremidi::output_configuration ULibremidiOutput::CreateOutputConfiguration()
 
 void ULibremidiOutput::HandleError(const FString& ErrorMessage)
 {
-	UE_LOG(LogLibremidi4UE, Error, TEXT("MidiOutput Error: %s"), *ErrorMessage);
-	
-	AsyncTask(ENamedThreads::GameThread, [this, ErrorMessage]()
-	{
-		if (IsValid(this))
-		{
-			OnError.Broadcast(ErrorMessage);
-		}
-	});
+	UE::MIDI::Private::DispatchErrorToGameThread(this, ErrorMessage, OnError);
 }
 
 void ULibremidiOutput::NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual)
@@ -304,5 +284,243 @@ void ULibremidiOutput::NotifyPortClosed()
 
 	CurrentPortInfo = FMidiPortInfo();
 	bIsVirtualPort = false;
+}
+
+// ============================================================================
+// High-Level MIDI Message Sending (Normalized Float to High-Resolution)
+// ============================================================================
+
+namespace
+{
+	/**
+	 * Normalization constants for float ? MIDI data conversion.
+	 * Converts normalized float values to maximum resolution supported by MIDI 2.0.
+	 */
+	namespace MidiDenormalization
+	{
+		constexpr uint32 Velocity16Bit = 65535;      // 0.0-1.0 ? 0-65535 (MIDI 2.0)
+		constexpr uint32 Value32Bit = 4294967295;    // 0.0-1.0 ? 0-4294967295 (MIDI 2.0)
+		constexpr int32  PitchBend32Bit = 2147483647; // -1.0-1.0 ? -2147483648-2147483647 (MIDI 2.0)
+	}
+
+	/**
+	 * Clamp and convert normalized float to high-resolution MIDI 2.0 values.
+	 * libremidi will automatically downsample to MIDI 1.0 if needed.
+	 */
+	FORCEINLINE uint16 FloatToVelocity16(float Value)
+	{
+		return static_cast<uint16>(FMath::Clamp(Value, 0.0f, 1.0f) * MidiDenormalization::Velocity16Bit);
+	}
+
+	FORCEINLINE uint32 FloatToValue32(float Value)
+	{
+		return static_cast<uint32>(FMath::Clamp(Value, 0.0f, 1.0f) * MidiDenormalization::Value32Bit);
+	}
+
+	FORCEINLINE int32 FloatToPitchBend32(float Value)
+	{
+		return static_cast<int32>(FMath::Clamp(Value, -1.0f, 1.0f) * MidiDenormalization::PitchBend32Bit);
+	}
+}
+
+bool ULibremidiOutput::SendNoteOn(int32 Channel, int32 Note, float Velocity)
+{
+	if (!MidiOut || !MidiOut->is_port_open())
+	{
+		HandleError(TEXT("Port is not open"));
+		return false;
+	}
+
+	Channel = FLibremidiUtils::ClampChannel(Channel);
+	Note = FLibremidiUtils::ClampNote(Note);
+	const uint16 Vel16 = FloatToVelocity16(Velocity);
+
+	// Build MIDI 2.0 UMP Note On message (Type 4, 64-bit)
+	const uint32 Word0 = (0x4 << 28) | (0x9 << 20) | (Channel << 16) | (Note << 8);
+	const uint32 Word1 = (Vel16 << 16);
+
+	const uint32 UMPData[] = {Word0, Word1};
+
+	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	{
+		HandleError(TEXT("Failed to send Note On"));
+		return false;
+	}
+
+	return true;
+}
+
+bool ULibremidiOutput::SendNoteOff(int32 Channel, int32 Note, float Velocity)
+{
+	if (!MidiOut || !MidiOut->is_port_open())
+	{
+		HandleError(TEXT("Port is not open"));
+		return false;
+	}
+
+	Channel = FLibremidiUtils::ClampChannel(Channel);
+	Note = FLibremidiUtils::ClampNote(Note);
+	const uint16 Vel16 = FloatToVelocity16(Velocity);
+
+	// Build MIDI 2.0 UMP Note Off message (Type 4, 64-bit)
+	const uint32 Word0 = (0x4 << 28) | (0x8 << 20) | (Channel << 16) | (Note << 8);
+	const uint32 Word1 = (Vel16 << 16);
+
+	const uint32 UMPData[] = {Word0, Word1};
+
+	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	{
+		HandleError(TEXT("Failed to send Note Off"));
+		return false;
+	}
+
+	return true;
+}
+
+bool ULibremidiOutput::SendControlChange(int32 Channel, int32 Controller, float Value)
+{
+	if (!MidiOut || !MidiOut->is_port_open())
+	{
+		HandleError(TEXT("Port is not open"));
+		return false;
+	}
+
+	Channel = FLibremidiUtils::ClampChannel(Channel);
+	Controller = FLibremidiUtils::ClampController(Controller);
+	const uint32 Val32 = FloatToValue32(Value);
+
+	// Build MIDI 2.0 UMP Control Change message (Type 4, 64-bit)
+	const uint32 Word0 = (0x4 << 28) | (0xB << 20) | (Channel << 16) | (Controller << 8);
+	const uint32 Word1 = Val32;
+
+	const uint32 UMPData[] = {Word0, Word1};
+
+	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	{
+		HandleError(TEXT("Failed to send Control Change"));
+		return false;
+	}
+
+	return true;
+}
+
+bool ULibremidiOutput::SendProgramChange(int32 Channel, int32 Program)
+{
+	if (!MidiOut || !MidiOut->is_port_open())
+	{
+		HandleError(TEXT("Port is not open"));
+		return false;
+	}
+
+	Channel = FLibremidiUtils::ClampChannel(Channel);
+	Program = FLibremidiUtils::ClampProgram(Program);
+
+	// Build MIDI 2.0 UMP Program Change message (Type 4, 64-bit)
+	const uint32 Word0 = (0x4 << 28) | (0xC << 20) | (Channel << 16);
+	const uint32 Word1 = (Program << 24);
+
+	const uint32 UMPData[] = {Word0, Word1};
+
+	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	{
+		HandleError(TEXT("Failed to send Program Change"));
+		return false;
+	}
+
+	return true;
+}
+
+bool ULibremidiOutput::SendPitchBend(int32 Channel, float Value)
+{
+	if (!MidiOut || !MidiOut->is_port_open())
+	{
+		HandleError(TEXT("Port is not open"));
+		return false;
+	}
+
+	Channel = FLibremidiUtils::ClampChannel(Channel);
+	const uint32 Bend32 = static_cast<uint32>(FloatToPitchBend32(Value));
+
+	// Build MIDI 2.0 UMP Pitch Bend message (Type 4, 64-bit)
+	const uint32 Word0 = (0x4 << 28) | (0xE << 20) | (Channel << 16);
+	const uint32 Word1 = Bend32;
+
+	const uint32 UMPData[] = {Word0, Word1};
+
+	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	{
+		HandleError(TEXT("Failed to send Pitch Bend"));
+		return false;
+	}
+
+	return true;
+}
+
+bool ULibremidiOutput::SendChannelPressure(int32 Channel, float Pressure)
+{
+	if (!MidiOut || !MidiOut->is_port_open())
+	{
+		HandleError(TEXT("Port is not open"));
+		return false;
+	}
+
+	Channel = FLibremidiUtils::ClampChannel(Channel);
+	const uint32 Press32 = FloatToValue32(Pressure);
+
+	// Build MIDI 2.0 UMP Channel Pressure message (Type 4, 64-bit)
+	const uint32 Word0 = (0x4 << 28) | (0xD << 20) | (Channel << 16);
+	const uint32 Word1 = Press32;
+
+	const uint32 UMPData[] = {Word0, Word1};
+
+	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	{
+		HandleError(TEXT("Failed to send Channel Pressure"));
+		return false;
+	}
+
+	return true;
+}
+
+bool ULibremidiOutput::SendPolyPressure(int32 Channel, int32 Note, float Pressure)
+{
+	if (!MidiOut || !MidiOut->is_port_open())
+	{
+		HandleError(TEXT("Port is not open"));
+		return false;
+	}
+
+	Channel = FLibremidiUtils::ClampChannel(Channel);
+	Note = FLibremidiUtils::ClampNote(Note);
+	const uint32 Press32 = FloatToValue32(Pressure);
+
+	// Build MIDI 2.0 UMP Polyphonic Key Pressure message (Type 4, 64-bit)
+	const uint32 Word0 = (0x4 << 28) | (0xA << 20) | (Channel << 16) | (Note << 8);
+	const uint32 Word1 = Press32;
+
+	const uint32 UMPData[] = {Word0, Word1};
+
+	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	{
+		HandleError(TEXT("Failed to send Poly Pressure"));
+		return false;
+	}
+
+	return true;
+}
+
+bool ULibremidiOutput::SendAllNotesOff(int32 Channel)
+{
+	return SendControlChange(Channel, 123, 0.0f);
+}
+
+bool ULibremidiOutput::SendAllSoundOff(int32 Channel)
+{
+	return SendControlChange(Channel, 120, 0.0f);
+}
+
+bool ULibremidiOutput::SendResetAllControllers(int32 Channel)
+{
+	return SendControlChange(Channel, 121, 0.0f);
 }
 

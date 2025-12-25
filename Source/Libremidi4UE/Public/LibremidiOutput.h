@@ -15,8 +15,43 @@ class ULibremidiEngineSubsystem;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiOutputError, const FString&, ErrorMessage);
 
 /**
- * MIDI Output class for sending MIDI 1.0 and MIDI 2.0 (UMP) messages
- * Supports both hardware and virtual ports
+ * MIDI Output handler for sending MIDI 1.0 and MIDI 2.0 (UMP) messages.
+ * 
+ * ## Unified High-Resolution Processing
+ * This class ALWAYS sends MIDI data as high-resolution UMP (MIDI 2.0) format internally.
+ * libremidi automatically handles format conversion:
+ * 
+ * - **MIDI 1.0 port**: High-resolution data is automatically downsampled (16-bit ? 7-bit)
+ * - **MIDI 2.0 port**: Native high-resolution data is preserved
+ * 
+ * ## Data Normalization (Input)
+ * This class accepts normalized float values and converts them to high-resolution MIDI:
+ * - **Velocity / CC / Pressure**: float 0.0-1.0 ? 16-bit (0-65535) or 32-bit (0-4.2B)
+ * - **Pitch Bend**: float -1.0-1.0 ? 32-bit signed (-2.1B to 2.1B)
+ * 
+ * ## Automatic Format Conversion
+ * Thanks to libremidi's automatic conversion:
+ * - MIDI 1.0 ports automatically downsample from high-resolution UMP
+ * - MIDI 2.0 ports preserve full high-resolution data
+ * - Your code always sends consistent normalized float values
+ * 
+ * ## Thread Safety
+ * Send operations are thread-safe and can be called from any thread.
+ * Error broadcasts are dispatched to the game thread via AsyncTask.
+ * 
+ * ## Usage Example
+ * ```cpp
+ * // C++
+ * ULibremidiOutput* Output = ULibremidiOutput::CreateMidiOutput(this);
+ * Output->OpenPort(PortInfo);  // Works with both MIDI 1.0 and 2.0 ports
+ * 
+ * // Always send high-resolution data - automatic conversion happens internally
+ * Output->SendNoteOn(0, 60, 0.8f);  // Channel 0, Note 60, Velocity 0.8
+ * Output->SendPitchBend(0, 0.5f);   // Channel 0, Pitch Bend +0.5
+ * ```
+ * 
+ * @see ULibremidiEngineSubsystem for port enumeration and global MIDI API selection
+ * @see ULibremidiInput for receiving MIDI messages with automatic normalization
  */
 UCLASS(BlueprintType, Category = "MIDI")
 class LIBREMIDI4UE_API ULibremidiOutput : public UObject
@@ -41,38 +76,23 @@ public:
 	static ULibremidiOutput* CreateMidiOutput(UObject* WorldContextObject);
 
 	/**
-	 * Open a MIDI output port (MIDI 1.0)
-	 * @param PortInfo The port to open
-	 * @param ClientName Optional client name
-	 * @return True if the port was opened successfully
+	 * Open a hardware MIDI output port.
+	 * Port type is automatically detected and data is always sent as UMP internally.
+	 * @param PortInfo Port information obtained from LibremidiEngineSubsystem
+	 * @param ClientName Optional client name visible to other MIDI applications
+	 * @return True if port opened successfully
 	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Port (MIDI 1.0)"))
+	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Port"))
 	bool OpenPort(const FMidiPortInfo& PortInfo, const FString& ClientName = TEXT("Unreal Engine MIDI Output"));
 
 	/**
-	 * Open a MIDI output port (MIDI 2.0 UMP)
-	 * @param PortInfo The port to open
-	 * @param ClientName Optional client name
-	 * @return True if the port was opened successfully
+	 * Create and open a virtual MIDI output port.
+	 * Data is always sent as UMP internally.
+	 * @param PortName Name of the virtual port
+	 * @return True if virtual port created successfully
 	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Port (MIDI 2.0 UMP)"))
-	bool OpenPortUMP(const FMidiPortInfo& PortInfo, const FString& ClientName = TEXT("Unreal Engine MIDI Output"));
-
-	/**
-	 * Open a virtual MIDI output port (MIDI 1.0)
-	 * @param PortName The name for the virtual port
-	 * @return True if the port was opened successfully
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Virtual Port (MIDI 1.0)"))
+	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Virtual Port"))
 	bool OpenVirtualPort(const FString& PortName);
-
-	/**
-	 * Open a virtual MIDI output port (MIDI 2.0 UMP)
-	 * @param PortName The name for the virtual port
-	 * @return True if the port was opened successfully
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Virtual Port (MIDI 2.0 UMP)"))
-	bool OpenVirtualPortUMP(const FString& PortName);
 
 	/**
 	 * Close the currently open port
@@ -82,12 +102,11 @@ public:
 	bool ClosePort();
 
 	/**
-	 * Send a MIDI message (MIDI 1.0)
-	 * Automatically converted to UMP if port is opened in MIDI 2.0 mode
+	 * Send a MIDI message (MIDI 1.0 format) - C++ only
+	 * Automatically converted to UMP and then to appropriate port format
 	 * @param Data The MIDI message bytes to send
 	 * @return True if the message was sent successfully
 	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Send Message (MIDI 1.0)"))
 	bool SendMessage(const TArray<uint8>& Data);
 
 	/**
@@ -118,49 +137,116 @@ public:
 	UFUNCTION(BlueprintPure, Category = "MIDI", meta = (DisplayName = "Get Current API"))
 	ELibremidiAPI GetCurrentAPI() const;
 
-	/**
-	 * Check if this output is using MIDI 2.0 (UMP)
-	 * @return True if using MIDI 2.0
-	 */
-	UFUNCTION(BlueprintPure, Category = "MIDI", meta = (DisplayName = "Is MIDI 2.0"))
-	bool IsMidi2() const { return bIsMidi2; }
+	/** Get information about the currently open port */
+	const FMidiPortInfo& GetCurrentPortInfo() const { return CurrentPortInfo; }
+
+	// ============================================================================
+	// High-Level MIDI Message Sending (Normalized Float Values)
+	// ============================================================================
 
 	/**
-	 * Get the current port info
-	 * @return The current port info
+	 * Send Note On message.
+	 * @param Channel MIDI channel (0-15)
+	 * @param Note MIDI note number (0-127)
+	 * @param Velocity Normalized velocity (0.0 = silent, 1.0 = maximum)
+	 * @return True if sent successfully
 	 */
-	const FMidiPortInfo& GetCurrentPortInfo() const { return CurrentPortInfo; }
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Note On"))
+	bool SendNoteOn(int32 Channel, int32 Note, float Velocity);
+
+	/**
+	 * Send Note Off message.
+	 * @param Channel MIDI channel (0-15)
+	 * @param Note MIDI note number (0-127)
+	 * @param Velocity Normalized release velocity (0.0-1.0)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Note Off"))
+	bool SendNoteOff(int32 Channel, int32 Note, float Velocity);
+
+	/**
+	 * Send Control Change message.
+	 * @param Channel MIDI channel (0-15)
+	 * @param Controller Controller number (0-127)
+	 * @param Value Normalized control value (0.0-1.0)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Control Change"))
+	bool SendControlChange(int32 Channel, int32 Controller, float Value);
+
+	/**
+	 * Send Program Change message.
+	 * @param Channel MIDI channel (0-15)
+	 * @param Program Program number (0-127)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Program Change"))
+	bool SendProgramChange(int32 Channel, int32 Program);
+
+	/**
+	 * Send Pitch Bend message.
+	 * @param Channel MIDI channel (0-15)
+	 * @param Value Normalized pitch bend (-1.0 = down, 0.0 = center, 1.0 = up)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Pitch Bend"))
+	bool SendPitchBend(int32 Channel, float Value);
+
+	/**
+	 * Send Channel Pressure (Aftertouch) message.
+	 * @param Channel MIDI channel (0-15)
+	 * @param Pressure Normalized pressure (0.0-1.0)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Channel Pressure"))
+	bool SendChannelPressure(int32 Channel, float Pressure);
+
+	/**
+	 * Send Polyphonic Key Pressure message.
+	 * @param Channel MIDI channel (0-15)
+	 * @param Note MIDI note number (0-127)
+	 * @param Pressure Normalized pressure (0.0-1.0)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Poly Pressure"))
+	bool SendPolyPressure(int32 Channel, int32 Note, float Pressure);
+
+	/**
+	 * Send All Notes Off message (CC 123).
+	 * @param Channel MIDI channel (0-15)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send All Notes Off"))
+	bool SendAllNotesOff(int32 Channel);
+
+	/**
+	 * Send All Sound Off message (CC 120).
+	 * @param Channel MIDI channel (0-15)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send All Sound Off"))
+	bool SendAllSoundOff(int32 Channel);
+
+	/**
+	 * Send Reset All Controllers message (CC 121).
+	 * @param Channel MIDI channel (0-15)
+	 * @return True if sent successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Send", meta = (DisplayName = "Send Reset All Controllers"))
+	bool SendResetAllControllers(int32 Channel);
 
 private:
 	TUniquePtr<libremidi::midi_out> MidiOut;
-	bool bIsMidi2 = false;
 	FMidiPortInfo CurrentPortInfo;
 	bool bIsVirtualPort = false;
 
-	/** Get the MIDI Engine Subsystem */
 	ULibremidiEngineSubsystem* GetSubsystem() const;
-	
-	/** Convert FMidiPortInfo to libremidi::output_port */
 	libremidi::output_port ConvertPortInfo(const FMidiPortInfo& PortInfo) const;
-	
-	/** Create MIDI output instance (MIDI 1.0 or 2.0) */
-	bool CreateMidiOut(bool bUseMidi2, libremidi::API API);
-	
-	/** Common port opening logic */
-	bool OpenPortInternal(const FMidiPortInfo& PortInfo, const FString& ClientName, bool bUseMidi2);
-	
-	/** Common virtual port opening logic */
-	bool OpenVirtualPortInternal(const FString& PortName, bool bUseMidi2);
+	bool CreateMidiOut(libremidi::API API);
 
-	/** Create output configuration */
 	libremidi::output_configuration CreateOutputConfiguration();
-	
-	/** Handle errors */
 	void HandleError(const FString& ErrorMessage);
 
-	/** Notify subsystem that port was opened */
 	void NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual);
-
-	/** Notify subsystem that port was closed */
 	void NotifyPortClosed();
 };

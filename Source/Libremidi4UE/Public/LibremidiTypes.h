@@ -8,27 +8,36 @@ THIRD_PARTY_INCLUDES_END
 
 #include "LibremidiTypes.generated.h"
 
+// Forward declarations
+class ULibremidiEngineSubsystem;
+
+/**
+ * MIDI API backend selection
+ */
 UENUM(BlueprintType)
 enum class ELibremidiAPI : uint8
 {
-	Unspecified UMETA(DisplayName = "Unspecified (Auto-detect)", ToolTip = "Automatically select the best available API"),
-	Dummy UMETA(DisplayName = "Dummy", ToolTip = "Dummy API for testing"),
-	AlsaSeq UMETA(DisplayName = "ALSA Sequencer (Linux)", ToolTip = "ALSA Sequencer API for Linux"),
-	AlsaRaw UMETA(DisplayName = "ALSA Raw (Linux)", ToolTip = "ALSA Raw MIDI API for Linux"),
-	CoreMidi UMETA(DisplayName = "CoreMIDI (macOS/iOS)", ToolTip = "CoreMIDI API for macOS and iOS"),
-	WindowsMM UMETA(DisplayName = "Windows Multimedia (Legacy)", ToolTip = "Legacy Windows Multimedia API"),
-	WindowsUWP UMETA(DisplayName = "Windows UWP", ToolTip = "Universal Windows Platform MIDI API"),
-	Jack UMETA(DisplayName = "JACK Audio", ToolTip = "JACK Audio Connection Kit"),
-	PipeWire UMETA(DisplayName = "PipeWire (Linux)", ToolTip = "PipeWire multimedia framework"),
+	Unspecified UMETA(DisplayName = "Auto (Unspecified)", ToolTip = "Automatically select the best available API. Prefers MIDI 2.0 (UMP) APIs when available. Legacy APIs will automatically convert between MIDI 1.0 and UMP formats."),
+	Dummy UMETA(DisplayName = "Dummy (Testing)", ToolTip = "Dummy API for testing without actual MIDI hardware"),
+	AlsaSeq UMETA(DisplayName = "ALSA Sequencer (Linux)", ToolTip = "ALSA Sequencer API for Linux. MIDI 1.0 format with automatic UMP conversion."),
+	AlsaRaw UMETA(DisplayName = "ALSA Raw (Linux)", ToolTip = "ALSA Raw MIDI API for Linux. MIDI 1.0 format with automatic UMP conversion."),
+	CoreMidi UMETA(DisplayName = "CoreMIDI (macOS/iOS)", ToolTip = "CoreMIDI API for macOS and iOS. MIDI 1.0 format with automatic UMP conversion."),
+	WindowsMM UMETA(DisplayName = "Windows Multimedia (Legacy)", ToolTip = "Legacy Windows Multimedia API. MIDI 1.0 format with automatic UMP conversion."),
+	WindowsUWP UMETA(DisplayName = "Windows UWP", ToolTip = "Universal Windows Platform MIDI API. MIDI 1.0 format with automatic UMP conversion."),
+	Jack UMETA(DisplayName = "JACK Audio", ToolTip = "JACK Audio Connection Kit. MIDI 1.0 format with automatic UMP conversion."),
+	PipeWire UMETA(DisplayName = "PipeWire (Linux)", ToolTip = "PipeWire multimedia framework. MIDI 1.0 format with automatic UMP conversion."),
 	Emscripten UMETA(DisplayName = "Web MIDI (Emscripten)", ToolTip = "Web MIDI API for browsers"),
-	WindowsMidiServices UMETA(DisplayName = "Windows MIDI Services (MIDI 2.0)", ToolTip = "Modern Windows MIDI Services with MIDI 2.0 support"),
-	AlsaSeqUMP UMETA(DisplayName = "ALSA Sequencer UMP (MIDI 2.0)", ToolTip = "ALSA Sequencer with Universal MIDI Packet support"),
-	AlsaRawUMP UMETA(DisplayName = "ALSA Raw UMP (MIDI 2.0)", ToolTip = "ALSA Raw with Universal MIDI Packet support"),
-	CoreMidiUMP UMETA(DisplayName = "CoreMIDI UMP (MIDI 2.0)", ToolTip = "CoreMIDI with Universal MIDI Packet support"),
-	JackUMP UMETA(DisplayName = "JACK UMP (MIDI 2.0)", ToolTip = "JACK with Universal MIDI Packet support"),
-	PipeWireUMP UMETA(DisplayName = "PipeWire UMP (MIDI 2.0)", ToolTip = "PipeWire with Universal MIDI Packet support")
+	WindowsMidiServices UMETA(DisplayName = "Windows MIDI Services (MIDI 2.0)", ToolTip = "Modern Windows MIDI Services with native MIDI 2.0 support. Requires Windows 11+."),
+	AlsaSeqUMP UMETA(DisplayName = "ALSA Sequencer UMP (MIDI 2.0)", ToolTip = "ALSA Sequencer with native Universal MIDI Packet support"),
+	AlsaRawUMP UMETA(DisplayName = "ALSA Raw UMP (MIDI 2.0)", ToolTip = "ALSA Raw with native Universal MIDI Packet support"),
+	CoreMidiUMP UMETA(DisplayName = "CoreMIDI UMP (MIDI 2.0)", ToolTip = "CoreMIDI with native Universal MIDI Packet support. Requires macOS 11+."),
+	JackUMP UMETA(DisplayName = "JACK UMP (MIDI 2.0)", ToolTip = "JACK with native Universal MIDI Packet support. Requires PipeWire v1.4+."),
+	PipeWireUMP UMETA(DisplayName = "PipeWire UMP (MIDI 2.0)", ToolTip = "PipeWire with native Universal MIDI Packet support. Requires v1.4+.")
 };
 
+/**
+ * MIDI port type flags
+ */
 UENUM(BlueprintType, meta = (Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
 enum class ELibremidiPortType : uint8
 {
@@ -42,6 +51,9 @@ enum class ELibremidiPortType : uint8
 	Network = 7 UMETA(DisplayName = "Network", ToolTip = "Network MIDI (RTP-MIDI, etc.)")
 };
 
+/**
+ * Container identifier type
+ */
 UENUM(BlueprintType)
 enum class ELibremidiContainerType : uint8
 {
@@ -51,6 +63,9 @@ enum class ELibremidiContainerType : uint8
 	Integer UMETA(DisplayName = "Integer", ToolTip = "Container identified by integer (e.g., CoreMIDI USBLocationID)")
 };
 
+/**
+ * Device identifier type
+ */
 UENUM(BlueprintType)
 enum class ELibremidiDeviceType : uint8
 {
@@ -60,7 +75,7 @@ enum class ELibremidiDeviceType : uint8
 };
 
 /**
- * MIDI Message Type enum
+ * MIDI message type classification
  */
 UENUM(BlueprintType)
 enum class ELibremidiMessageType : uint8
@@ -79,7 +94,7 @@ enum class ELibremidiMessageType : uint8
 };
 
 /**
- * Common MIDI Control Change numbers
+ * Common MIDI Control Change numbers (MIDI CC)
  */
 UENUM(BlueprintType)
 enum class ELibremidiControlChange : uint8
@@ -132,140 +147,186 @@ enum class ELibremidiControlChange : uint8
 	PolyModeOn = 127 UMETA(DisplayName = "Poly Mode On")
 };
 
+/**
+ * MIDI port information structure
+ * Contains all metadata about a MIDI port including hardware identifiers and descriptive names
+ */
 USTRUCT(BlueprintType)
 struct LIBREMIDI4UE_API FMidiPortInfo
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Handles", meta = (DisplayName = "Client Handle", ToolTip = "API-specific client handle identifier"))
+	/** API-specific client handle identifier */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Handles", meta = (DisplayName = "Client Handle"))
 	int64 ClientHandle = -1;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Handles", meta = (DisplayName = "Port Handle", ToolTip = "API-specific port handle identifier"))
+	/** API-specific port handle identifier */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Handles", meta = (DisplayName = "Port Handle"))
 	int64 PortHandle = -1;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container Type", ToolTip = "Type of container identifier"))
+	/** Type of container identifier */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container Type"))
 	ELibremidiContainerType ContainerType = ELibremidiContainerType::None;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container UUID", ToolTip = "Container UUID (WinMIDI ContainerID as hex string)"))
+	/** Container UUID (WinMIDI ContainerID as hex string) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container UUID"))
 	FString ContainerUUID;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container String", ToolTip = "Container string identifier (e.g., ALSA device ID)"))
+	/** Container string identifier (e.g., ALSA device ID) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container String"))
 	FString ContainerString;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container Integer", ToolTip = "Container integer identifier (e.g., CoreMIDI USBLocationID)"))
+	/** Container integer identifier (e.g., CoreMIDI USBLocationID) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container", meta = (DisplayName = "Container Integer"))
 	int64 ContainerInteger = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device Type", ToolTip = "Type of device identifier"))
+	/** Type of device identifier */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device Type"))
 	ELibremidiDeviceType DeviceType = ELibremidiDeviceType::None;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device String", ToolTip = "Device string identifier (e.g., WinMIDI EndpointDeviceId, ALSA sysfs path)"))
+	/** Device string identifier (e.g., WinMIDI EndpointDeviceId, ALSA sysfs path) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device String"))
 	FString DeviceString;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device Integer", ToolTip = "Device integer identifier (e.g., CoreMIDI USBVendorProduct)"))
+	/** Device integer identifier (e.g., CoreMIDI USBVendorProduct) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device", meta = (DisplayName = "Device Integer"))
 	int64 DeviceInteger = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Manufacturer", ToolTip = "Device manufacturer name (e.g., Roland, Yamaha)"))
+	/** Device manufacturer name (e.g., Roland, Yamaha) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Manufacturer"))
 	FString Manufacturer;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Device Name", ToolTip = "Physical device name"))
+	/** Physical device name */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Device Name"))
 	FString DeviceName;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Port Name", ToolTip = "Specific port name on the device"))
+	/** Specific port name on the device */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Port Name"))
 	FString PortName;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Display Name", ToolTip = "User-friendly display name (recommended for UI)"))
+	/** User-friendly display name (recommended for UI) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Display Name"))
 	FString DisplayName;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Port Type", ToolTip = "Type of MIDI port (USB, Bluetooth, etc.)"))
+	/** Type of MIDI port (USB, Bluetooth, etc.) */
+	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Info", meta = (DisplayName = "Port Type"))
 	ELibremidiPortType PortType = ELibremidiPortType::Unknown;
 
+	/** Default constructor */
 	FMidiPortInfo() = default;
 
-	explicit FMidiPortInfo(const libremidi::port_information& port)
-		: ClientHandle(static_cast<int64>(port.client))
-		, PortHandle(static_cast<int64>(port.port))
-		, Manufacturer(UTF8_TO_TCHAR(port.manufacturer.c_str()))
-		, DeviceName(UTF8_TO_TCHAR(port.device_name.c_str()))
-		, PortName(UTF8_TO_TCHAR(port.port_name.c_str()))
-		, DisplayName(UTF8_TO_TCHAR(port.display_name.c_str()))
-		, PortType(static_cast<ELibremidiPortType>(port.type))
-	{
-		ParseContainerIdentifier(port.container);
-		ParseDeviceIdentifier(port.device);
-	}
+	/** Construct from libremidi port_information */
+	explicit FMidiPortInfo(const libremidi::port_information& InPort);
 
+	/** Equality operator - compares by handle */
 	bool operator==(const FMidiPortInfo& Other) const
 	{
 		return ClientHandle == Other.ClientHandle && PortHandle == Other.PortHandle;
 	}
 
+	/** Inequality operator */
 	bool operator!=(const FMidiPortInfo& Other) const
 	{
 		return !(*this == Other);
 	}
 
+	/** Check if port info is valid */
 	bool IsValid() const
 	{
 		return ClientHandle != -1 && PortHandle != -1;
 	}
 
 private:
-	void ParseContainerIdentifier(const libremidi::container_identifier& Container)
-	{
-		if (std::holds_alternative<libremidi::uuid>(Container))
-		{
-			ContainerType = ELibremidiContainerType::UUID;
-			const auto& UUID = std::get<libremidi::uuid>(Container);
-			ContainerUUID = BytesToHexString(UUID.bytes.data(), UUID.bytes.size());
-		}
-		else if (std::holds_alternative<std::string>(Container))
-		{
-			ContainerType = ELibremidiContainerType::String;
-			ContainerString = UTF8_TO_TCHAR(std::get<std::string>(Container).c_str());
-		}
-		else if (std::holds_alternative<std::uint64_t>(Container))
-		{
-			ContainerType = ELibremidiContainerType::Integer;
-			ContainerInteger = static_cast<int64>(std::get<std::uint64_t>(Container));
-		}
-		else
-		{
-			ContainerType = ELibremidiContainerType::None;
-		}
-	}
-
-	void ParseDeviceIdentifier(const libremidi::device_identifier& Device)
-	{
-		if (std::holds_alternative<std::string>(Device))
-		{
-			DeviceType = ELibremidiDeviceType::String;
-			DeviceString = UTF8_TO_TCHAR(std::get<std::string>(Device).c_str());
-		}
-		else if (std::holds_alternative<std::uint64_t>(Device))
-		{
-			DeviceType = ELibremidiDeviceType::Integer;
-			DeviceInteger = static_cast<int64>(std::get<std::uint64_t>(Device));
-		}
-		else
-		{
-			DeviceType = ELibremidiDeviceType::None;
-		}
-	}
-
-	static FString BytesToHexString(const uint8_t* Bytes, size_t Length)
-	{
-		FString Result;
-		Result.Reserve(static_cast<int32>(Length * 2));
-		for (size_t i = 0; i < Length; ++i)
-		{
-			Result += FString::Printf(TEXT("%02X"), Bytes[i]);
-		}
-		return Result;
-	}
+	void ParseContainerIdentifier(const libremidi::container_identifier& Container);
+	void ParseDeviceIdentifier(const libremidi::device_identifier& Device);
+	static FString BytesToHexString(const uint8_t* Bytes, size_t Length);
 };
 
+/**
+ * API conversion utilities
+ */
 namespace LibremidiTypeConversion
 {
+	/** Convert UE enum to libremidi API */
 	LIBREMIDI4UE_API libremidi::API ToLibremidiAPI(ELibremidiAPI API);
+	
+	/** Convert libremidi API to UE enum */
 	LIBREMIDI4UE_API ELibremidiAPI FromLibremidiAPI(libremidi::API API);
 }
+
+/**
+ * MIDI constants following MIDI 1.0 specification
+ */
+namespace FLibremidiConstants
+{
+	// MIDI value ranges
+	static constexpr int32 MinChannel = 0;
+	static constexpr int32 MaxChannel = 15;
+	static constexpr int32 MinNote = 0;
+	static constexpr int32 MaxNote = 127;
+	static constexpr int32 MinController = 0;
+	static constexpr int32 MaxController = 127;
+	static constexpr int32 MinProgram = 0;
+	static constexpr int32 MaxProgram = 127;
+	static constexpr int32 MinData7Bit = 0;
+	static constexpr int32 MaxData7Bit = 127;
+
+	// MIDI status bytes (channel voice messages)
+	static constexpr uint8 NoteOff = 0x80;
+	static constexpr uint8 NoteOn = 0x90;
+	static constexpr uint8 PolyPressure = 0xA0;
+	static constexpr uint8 ControlChange = 0xB0;
+	static constexpr uint8 ProgramChange = 0xC0;
+	static constexpr uint8 ChannelPressure = 0xD0;
+	static constexpr uint8 PitchBend = 0xE0;
+	
+	// MIDI status bytes (system common messages)
+	static constexpr uint8 SongPosition = 0xF2;
+	static constexpr uint8 SongSelect = 0xF3;
+	
+	// MIDI status bytes (system real-time messages)
+	static constexpr uint8 Clock = 0xF8;
+	static constexpr uint8 Start = 0xFA;
+	static constexpr uint8 Continue = 0xFB;
+	static constexpr uint8 Stop = 0xFC;
+	
+	// System Exclusive
+	static constexpr uint8 SysExStart = 0xF0;
+	static constexpr uint8 SysExEnd = 0xF7;
+}
+
+/**
+ * MIDI value clamping utilities
+ */
+struct LIBREMIDI4UE_API FLibremidiUtils
+{
+	/** Clamp MIDI channel to valid range (0-15) */
+	static FORCEINLINE int32 ClampChannel(int32 Channel)
+	{
+		return FMath::Clamp(Channel, FLibremidiConstants::MinChannel, FLibremidiConstants::MaxChannel);
+	}
+
+	/** Clamp MIDI note number to valid range (0-127) */
+	static FORCEINLINE int32 ClampNote(int32 Note)
+	{
+		return FMath::Clamp(Note, FLibremidiConstants::MinNote, FLibremidiConstants::MaxNote);
+	}
+
+	/** Clamp MIDI controller number to valid range (0-127) */
+	static FORCEINLINE int32 ClampController(int32 Controller)
+	{
+		return FMath::Clamp(Controller, FLibremidiConstants::MinController, FLibremidiConstants::MaxController);
+	}
+
+	/** Clamp MIDI program number to valid range (0-127) */
+	static FORCEINLINE int32 ClampProgram(int32 Program)
+	{
+		return FMath::Clamp(Program, FLibremidiConstants::MinProgram, FLibremidiConstants::MaxProgram);
+	}
+
+	/** Clamp 7-bit MIDI data to valid range (0-127) */
+	static FORCEINLINE int32 ClampData7Bit(int32 Data)
+	{
+		return FMath::Clamp(Data, FLibremidiConstants::MinData7Bit, FLibremidiConstants::MaxData7Bit);
+	}
+};
