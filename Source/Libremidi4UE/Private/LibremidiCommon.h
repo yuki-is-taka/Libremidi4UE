@@ -40,7 +40,7 @@ namespace UE::MIDI::Private
 	 * @param PortInfo UE port information structure
 	 * @return libremidi input port structure
 	 */
-	inline libremidi::input_port ToLibremidiInputPort(const FMidiPortInfo& PortInfo)
+	inline libremidi::input_port ToLibremidiInputPort(const FLibremidiPortInfo& PortInfo)
 	{
 		libremidi::input_port Port;
 		Port.client = static_cast<std::uintptr_t>(PortInfo.ClientHandle);
@@ -57,7 +57,7 @@ namespace UE::MIDI::Private
 	 * @param PortInfo UE port information structure
 	 * @return libremidi output port structure
 	 */
-	inline libremidi::output_port ToLibremidiOutputPort(const FMidiPortInfo& PortInfo)
+	inline libremidi::output_port ToLibremidiOutputPort(const FLibremidiPortInfo& PortInfo)
 	{
 		libremidi::output_port Port;
 		Port.client = static_cast<std::uintptr_t>(PortInfo.ClientHandle);

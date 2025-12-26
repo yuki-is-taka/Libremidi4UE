@@ -13,6 +13,11 @@ THIRD_PARTY_INCLUDES_END
 class ULibremidiEngineSubsystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiOutputError, const FString&, ErrorMessage);
+/**
+ * Delegate fired when MIDI output port is successfully opened
+ * @param PortInfo Information about the opened port
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiOutputPortOpened, const FLibremidiPortInfo&, PortInfo);
 
 /**
  * MIDI Output handler for sending MIDI 1.0 and MIDI 2.0 (UMP) messages.
@@ -59,8 +64,7 @@ class LIBREMIDI4UE_API ULibremidiOutput : public UObject
 	GENERATED_BODY()
 
 public:
-	ULibremidiOutput();
-	virtual ~ULibremidiOutput();
+	ULibremidiOutput(const FObjectInitializer& ObjectInitializer);
 	virtual void BeginDestroy() override;
 
 	/** Error Event */
@@ -83,7 +87,7 @@ public:
 	 * @return True if port opened successfully
 	 */
 	UFUNCTION(BlueprintCallable, Category = "MIDI", meta = (DisplayName = "Open Port"))
-	bool OpenPort(const FMidiPortInfo& PortInfo, const FString& ClientName = TEXT("Unreal Engine MIDI Output"));
+	bool OpenPort(const FLibremidiPortInfo& PortInfo, const FString& ClientName = TEXT("Unreal Engine MIDI Output"));
 
 	/**
 	 * Create and open a virtual MIDI output port.
@@ -138,7 +142,29 @@ public:
 	ELibremidiAPI GetCurrentAPI() const;
 
 	/** Get information about the currently open port */
-	const FMidiPortInfo& GetCurrentPortInfo() const { return CurrentPortInfo; }
+	const FLibremidiPortInfo& GetCurrentPortInfo() const { return CurrentPortInfo; }
+
+	// ============================================================================
+	// Auto-Reconnection
+	// ============================================================================
+
+	/**
+	 * Enable or disable automatic reconnection when device is hot-plugged
+	 * @param bEnable True to enable auto-reconnection
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Auto-Reconnection", meta = (DisplayName = "Set Auto Reconnect"))
+	void SetAutoReconnect(bool bEnable);
+
+	/**
+	 * Check if auto-reconnection is enabled
+	 * @return True if auto-reconnection is enabled
+	 */
+	UFUNCTION(BlueprintPure, Category = "MIDI|Auto-Reconnection", meta = (DisplayName = "Is Auto Reconnect Enabled"))
+	bool IsAutoReconnectEnabled() const { return bEnableAutoReconnect; }
+
+	/** Delegate fired when port is successfully opened */
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events|System")
+	FOnMidiOutputPortOpened OnPortOpened;
 
 	// ============================================================================
 	// High-Level MIDI Message Sending (Normalized Float Values)
@@ -237,16 +263,27 @@ public:
 
 private:
 	TUniquePtr<libremidi::midi_out> MidiOut;
-	FMidiPortInfo CurrentPortInfo;
+	FLibremidiPortInfo CurrentPortInfo;
 	bool bIsVirtualPort = false;
 
+	// Auto-reconnection state
+	bool bEnableAutoReconnect = false;
+	FString LastClientName;
+	FLibremidiPortInfo LastDisconnectedPort;
+	FDelegateHandle HotPlugDelegateHandle;
+
 	ULibremidiEngineSubsystem* GetSubsystem() const;
-	libremidi::output_port ConvertPortInfo(const FMidiPortInfo& PortInfo) const;
+	libremidi::output_port ConvertPortInfo(const FLibremidiPortInfo& PortInfo) const;
 	bool CreateMidiOut(libremidi::API API);
 
 	libremidi::output_configuration CreateOutputConfiguration();
 	void HandleError(const FString& ErrorMessage);
 
-	void NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual);
+	void NotifyPortOpened(const FLibremidiPortInfo& PortInfo, bool bVirtual);
 	void NotifyPortClosed();
+	
+	// Auto-reconnection
+	void RegisterHotPlugDelegate();
+	void UnregisterHotPlugDelegate();
+	void HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedPort);
 };

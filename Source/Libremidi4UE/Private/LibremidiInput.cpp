@@ -41,14 +41,18 @@ THIRD_PARTY_INCLUDES_START
 #include <libremidi/libremidi.hpp>
 THIRD_PARTY_INCLUDES_END
 
-ULibremidiInput::ULibremidiInput()
+ULibremidiInput::ULibremidiInput(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
+	bIsVirtualPort = false;
+	bEnableAutoReconnect = true;
+	bUMPSysExInProgress = false;
+	UMPSysExStartTimestamp = 0;
 }
-
-ULibremidiInput::~ULibremidiInput() = default;
 
 void ULibremidiInput::BeginDestroy()
 {
+	UnregisterHotPlugDelegate();
 	ClosePort();
 	Super::BeginDestroy();
 }
@@ -69,7 +73,7 @@ ULibremidiEngineSubsystem* ULibremidiInput::GetSubsystem() const
 	return UE::MIDI::Private::GetEngineSubsystem();
 }
 
-libremidi::input_port ULibremidiInput::ConvertPortInfo(const FMidiPortInfo& PortInfo) const
+libremidi::input_port ULibremidiInput::ConvertPortInfo(const FLibremidiPortInfo& PortInfo) const
 {
 	return UE::MIDI::Private::ToLibremidiInputPort(PortInfo);
 }
@@ -94,7 +98,7 @@ bool ULibremidiInput::CreateMidiIn(libremidi::API API)
 	}
 }
 
-bool ULibremidiInput::OpenPort(const FMidiPortInfo& PortInfo, const FString& ClientName)
+bool ULibremidiInput::OpenPort(const FLibremidiPortInfo& PortInfo, const FString& ClientName)
 {
 	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiIn.Get(), TEXT("Input")))
 	{
@@ -128,6 +132,9 @@ bool ULibremidiInput::OpenPort(const FMidiPortInfo& PortInfo, const FString& Cli
 		MidiIn.Reset();
 		return false;
 	}
+
+	// Store last client name for auto-reconnection
+	LastClientName = ClientName;
 
 	NotifyPortOpened(PortInfo, false);
 
@@ -165,12 +172,15 @@ bool ULibremidiInput::OpenVirtualPort(const FString& PortName)
 		return false;
 	}
 
-	FMidiPortInfo VirtualPortInfo;
+	FLibremidiPortInfo VirtualPortInfo;
 	VirtualPortInfo.DisplayName = PortName;
 	VirtualPortInfo.PortName = PortName;
+	
+	LastClientName = PortName;
+	
 	NotifyPortOpened(VirtualPortInfo, true);
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiInput: Opened virtual port '%s' with API: %s (UMP processing)"), 
+	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiInput: Opened virtual port '%s' with API: %s (UMP processing)"),
 		*PortName, 
 		*UEnum::GetValueAsString(API));
 	return true;
@@ -181,6 +191,12 @@ bool ULibremidiInput::ClosePort()
 	if (!MidiIn || !MidiIn->is_port_open())
 	{
 		return false;
+	}
+
+	// Store port info before closing (for potential reconnection)
+	if (!IsPortConnected() && bEnableAutoReconnect)
+	{
+		LastDisconnectedPort = CurrentPortInfo;
 	}
 
 	if (const auto Error = MidiIn->close_port(); Error != stdx::error{})
@@ -272,7 +288,7 @@ void ULibremidiInput::HandleError(const FString& ErrorMessage)
 	UE::MIDI::Private::DispatchErrorToGameThread(this, ErrorMessage, OnError);
 }
 
-void ULibremidiInput::NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual)
+void ULibremidiInput::NotifyPortOpened(const FLibremidiPortInfo& PortInfo, bool bVirtual)
 {
 	CurrentPortInfo = PortInfo;
 	bIsVirtualPort = bVirtual;
@@ -281,6 +297,9 @@ void ULibremidiInput::NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirt
 	{
 		Subsystem->RegisterInputPort(this);
 	}
+
+	// Fire OnPortOpened delegate
+	OnPortOpened.Broadcast(PortInfo);
 }
 
 void ULibremidiInput::NotifyPortClosed()
@@ -290,8 +309,111 @@ void ULibremidiInput::NotifyPortClosed()
 		Subsystem->UnregisterInputPort(this);
 	}
 
-	CurrentPortInfo = FMidiPortInfo();
+	CurrentPortInfo = FLibremidiPortInfo();
 	bIsVirtualPort = false;
+}
+
+// ============================================================================
+// Auto-Reconnection
+// ============================================================================
+
+void ULibremidiInput::SetAutoReconnect(bool bEnable)
+{
+	if (bEnableAutoReconnect == bEnable)
+	{
+		return;
+	}
+
+	bEnableAutoReconnect = bEnable;
+
+	if (bEnable)
+	{
+		RegisterHotPlugDelegate();
+		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiInput: Auto-reconnection enabled for '%s'"), 
+			*CurrentPortInfo.DisplayName);
+	}
+	else
+	{
+		UnregisterHotPlugDelegate();
+		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiInput: Auto-reconnection disabled"));
+	}
+}
+
+void ULibremidiInput::RegisterHotPlugDelegate()
+{
+	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
+	if (!Subsystem)
+	{
+		return;
+	}
+
+	// Unregister first if already registered
+	UnregisterHotPlugDelegate();
+
+	// Register delegate for hot-plug events
+	HotPlugDelegateHandle = Subsystem->OnInputPortConnected.AddUObject(
+		this, 
+		&ULibremidiInput::HandleHotPlugEvent
+	);
+
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("MidiInput: Registered hot-plug delegate"));
+}
+
+void ULibremidiInput::UnregisterHotPlugDelegate()
+{
+	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
+	if (Subsystem && HotPlugDelegateHandle.IsValid())
+	{
+		Subsystem->OnInputPortConnected.Remove(HotPlugDelegateHandle);
+		HotPlugDelegateHandle.Reset();
+		UE_LOG(LogLibremidi4UE, Verbose, TEXT("MidiInput: Unregistered hot-plug delegate"));
+	}
+}
+
+void ULibremidiInput::HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedPort)
+{
+	// Check if auto-reconnection is enabled
+	if (!bEnableAutoReconnect)
+	{
+		return;
+	}
+
+	// Check if currently disconnected
+	if (IsPortOpen() && IsPortConnected())
+	{
+		return;
+	}
+
+	// Check if this is the port we were connected to
+	const bool bSamePort = 
+		(ReconnectedPort.DisplayName == LastDisconnectedPort.DisplayName) ||
+		(ReconnectedPort.ClientHandle == LastDisconnectedPort.ClientHandle && 
+		 ReconnectedPort.PortHandle == LastDisconnectedPort.PortHandle);
+
+	if (!bSamePort)
+	{
+		return;
+	}
+
+	// Attempt to reconnect
+	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiInput: Attempting auto-reconnection to '%s'"), 
+		*ReconnectedPort.DisplayName);
+
+	// Close existing port if still open
+	if (IsPortOpen())
+	{
+		ClosePort();
+	}
+
+	// Try to reopen the port
+	if (OpenPort(ReconnectedPort, LastClientName))
+	{
+		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiInput: Auto-reconnection successful"));
+	}
+	else
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiInput: Auto-reconnection failed"));
+	}
 }
 
 // ============================================================================

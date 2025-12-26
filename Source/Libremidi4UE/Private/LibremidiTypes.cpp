@@ -2,7 +2,7 @@
 
 // FMidiPortInfo implementation
 
-FMidiPortInfo::FMidiPortInfo(const libremidi::port_information& InPort)
+FLibremidiPortInfo::FLibremidiPortInfo(const libremidi::port_information& InPort)
 	: ClientHandle(static_cast<int64>(InPort.client))
 	, PortHandle(static_cast<int64>(InPort.port))
 	, Manufacturer(UTF8_TO_TCHAR(InPort.manufacturer.c_str()))
@@ -15,7 +15,7 @@ FMidiPortInfo::FMidiPortInfo(const libremidi::port_information& InPort)
 	ParseDeviceIdentifier(InPort.device);
 }
 
-void FMidiPortInfo::ParseContainerIdentifier(const libremidi::container_identifier& Container)
+void FLibremidiPortInfo::ParseContainerIdentifier(const libremidi::container_identifier& Container)
 {
 	if (std::holds_alternative<libremidi::uuid>(Container))
 	{
@@ -39,7 +39,7 @@ void FMidiPortInfo::ParseContainerIdentifier(const libremidi::container_identifi
 	}
 }
 
-void FMidiPortInfo::ParseDeviceIdentifier(const libremidi::device_identifier& Device)
+void FLibremidiPortInfo::ParseDeviceIdentifier(const libremidi::device_identifier& Device)
 {
 	if (std::holds_alternative<std::string>(Device))
 	{
@@ -57,7 +57,7 @@ void FMidiPortInfo::ParseDeviceIdentifier(const libremidi::device_identifier& De
 	}
 }
 
-FString FMidiPortInfo::BytesToHexString(const uint8_t* Bytes, size_t Length)
+FString FLibremidiPortInfo::BytesToHexString(const uint8_t* Bytes, size_t Length)
 {
 	FString Result;
 	Result.Reserve(static_cast<int32>(Length * 2));

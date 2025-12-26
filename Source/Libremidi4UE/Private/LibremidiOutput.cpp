@@ -30,14 +30,16 @@ THIRD_PARTY_INCLUDES_START
 #include <libremidi/libremidi.hpp>
 THIRD_PARTY_INCLUDES_END
 
-ULibremidiOutput::ULibremidiOutput()
+ULibremidiOutput::ULibremidiOutput(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
+	bIsVirtualPort = false;
+	bEnableAutoReconnect = true;
 }
-
-ULibremidiOutput::~ULibremidiOutput() = default;
 
 void ULibremidiOutput::BeginDestroy()
 {
+	UnregisterHotPlugDelegate();
 	ClosePort();
 	Super::BeginDestroy();
 }
@@ -58,7 +60,7 @@ ULibremidiEngineSubsystem* ULibremidiOutput::GetSubsystem() const
 	return UE::MIDI::Private::GetEngineSubsystem();
 }
 
-libremidi::output_port ULibremidiOutput::ConvertPortInfo(const FMidiPortInfo& PortInfo) const
+libremidi::output_port ULibremidiOutput::ConvertPortInfo(const FLibremidiPortInfo& PortInfo) const
 {
 	return UE::MIDI::Private::ToLibremidiOutputPort(PortInfo);
 }
@@ -83,7 +85,7 @@ bool ULibremidiOutput::CreateMidiOut(libremidi::API API)
 	}
 }
 
-bool ULibremidiOutput::OpenPort(const FMidiPortInfo& PortInfo, const FString& ClientName)
+bool ULibremidiOutput::OpenPort(const FLibremidiPortInfo& PortInfo, const FString& ClientName)
 {
 	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
 	{
@@ -117,6 +119,9 @@ bool ULibremidiOutput::OpenPort(const FMidiPortInfo& PortInfo, const FString& Cl
 		MidiOut.Reset();
 		return false;
 	}
+
+	// Store last client name for auto-reconnection
+	LastClientName = ClientName;
 
 	NotifyPortOpened(PortInfo, false);
 
@@ -154,9 +159,12 @@ bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 		return false;
 	}
 
-	FMidiPortInfo VirtualPortInfo;
+	FLibremidiPortInfo VirtualPortInfo;
 	VirtualPortInfo.DisplayName = PortName;
 	VirtualPortInfo.PortName = PortName;
+	
+	LastClientName = PortName;
+	
 	NotifyPortOpened(VirtualPortInfo, true);
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened virtual port '%s' with API: %s (UMP processing)"), 
@@ -170,6 +178,12 @@ bool ULibremidiOutput::ClosePort()
 	if (!MidiOut || !MidiOut->is_port_open())
 	{
 		return false;
+	}
+
+	// Store port info before closing (for potential reconnection)
+	if (!IsPortConnected() && bEnableAutoReconnect)
+	{
+		LastDisconnectedPort = CurrentPortInfo;
 	}
 
 	if (const auto Error = MidiOut->close_port(); Error != stdx::error{})
@@ -264,7 +278,7 @@ void ULibremidiOutput::HandleError(const FString& ErrorMessage)
 	UE::MIDI::Private::DispatchErrorToGameThread(this, ErrorMessage, OnError);
 }
 
-void ULibremidiOutput::NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVirtual)
+void ULibremidiOutput::NotifyPortOpened(const FLibremidiPortInfo& PortInfo, bool bVirtual)
 {
 	CurrentPortInfo = PortInfo;
 	bIsVirtualPort = bVirtual;
@@ -273,6 +287,9 @@ void ULibremidiOutput::NotifyPortOpened(const FMidiPortInfo& PortInfo, bool bVir
 	{
 		Subsystem->RegisterOutputPort(this);
 	}
+
+	// Fire OnPortOpened delegate
+	OnPortOpened.Broadcast(PortInfo);
 }
 
 void ULibremidiOutput::NotifyPortClosed()
@@ -282,14 +299,116 @@ void ULibremidiOutput::NotifyPortClosed()
 		Subsystem->UnregisterOutputPort(this);
 	}
 
-	CurrentPortInfo = FMidiPortInfo();
+	CurrentPortInfo = FLibremidiPortInfo();
 	bIsVirtualPort = false;
+}
+
+// ============================================================================
+// Auto-Reconnection
+// ============================================================================
+
+void ULibremidiOutput::SetAutoReconnect(bool bEnable)
+{
+	if (bEnableAutoReconnect == bEnable)
+	{
+		return;
+	}
+
+	bEnableAutoReconnect = bEnable;
+
+	if (bEnable)
+	{
+		RegisterHotPlugDelegate();
+		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Auto-reconnection enabled for '%s'"), 
+			*CurrentPortInfo.DisplayName);
+	}
+	else
+	{
+		UnregisterHotPlugDelegate();
+		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Auto-reconnection disabled"));
+	}
+}
+
+void ULibremidiOutput::RegisterHotPlugDelegate()
+{
+	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
+	if (!Subsystem)
+	{
+		return;
+	}
+
+	// Unregister first if already registered
+	UnregisterHotPlugDelegate();
+
+	// Register delegate for hot-plug events
+	HotPlugDelegateHandle = Subsystem->OnOutputPortReconnected.AddUObject(
+		this, 
+		&ULibremidiOutput::HandleHotPlugEvent
+	);
+
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("MidiOutput: Registered hot-plug delegate"));
+}
+
+void ULibremidiOutput::UnregisterHotPlugDelegate()
+{
+	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
+	if (Subsystem && HotPlugDelegateHandle.IsValid())
+	{
+		Subsystem->OnOutputPortReconnected.Remove(HotPlugDelegateHandle);
+		HotPlugDelegateHandle.Reset();
+		UE_LOG(LogLibremidi4UE, Verbose, TEXT("MidiOutput: Unregistered hot-plug delegate"));
+	}
+}
+
+void ULibremidiOutput::HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedPort)
+{
+	// Check if auto-reconnection is enabled
+	if (!bEnableAutoReconnect)
+	{
+		return;
+	}
+
+	// Check if currently disconnected
+	if (IsPortOpen() && IsPortConnected())
+	{
+		return;
+	}
+
+	// Check if this is the port we were connected to
+	const bool bSamePort = 
+		(ReconnectedPort.DisplayName == LastDisconnectedPort.DisplayName) ||
+		(ReconnectedPort.ClientHandle == LastDisconnectedPort.ClientHandle && 
+		 ReconnectedPort.PortHandle == LastDisconnectedPort.PortHandle);
+
+	if (!bSamePort)
+	{
+		return;
+	}
+
+	// Attempt to reconnect
+	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Attempting auto-reconnection to '%s'"), 
+		*ReconnectedPort.DisplayName);
+
+	// Close existing port if still open
+	if (IsPortOpen())
+	{
+		ClosePort();
+	}
+
+	// Try to reopen the port
+	if (OpenPort(ReconnectedPort, LastClientName))
+	{
+		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Auto-reconnection successful"));
+	}
+	else
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: Auto-reconnection failed"));
+	}
 }
 
 // ============================================================================
 // High-Level MIDI Message Sending (Normalized Float to High-Resolution)
 // ============================================================================
-
 namespace
 {
 	/**
@@ -337,7 +456,7 @@ bool ULibremidiOutput::SendNoteOn(int32 Channel, int32 Note, float Velocity)
 
 	// Build MIDI 2.0 UMP Note On message (Type 4, 64-bit)
 	const uint32 Word0 = (0x4 << 28) | (0x9 << 20) | (Channel << 16) | (Note << 8);
-	const uint32 Word1 = (Vel16 << 16);
+	const uint32 Word1 = ( Vel16 << 16);
 
 	const uint32 UMPData[] = {Word0, Word1};
 
@@ -364,7 +483,7 @@ bool ULibremidiOutput::SendNoteOff(int32 Channel, int32 Note, float Velocity)
 
 	// Build MIDI 2.0 UMP Note Off message (Type 4, 64-bit)
 	const uint32 Word0 = (0x4 << 28) | (0x8 << 20) | (Channel << 16) | (Note << 8);
-	const uint32 Word1 = (Vel16 << 16);
+	const uint32 Word1 = ( Vel16 << 16);
 
 	const uint32 UMPData[] = {Word0, Word1};
 

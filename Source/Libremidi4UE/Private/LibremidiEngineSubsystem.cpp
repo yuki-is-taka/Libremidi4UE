@@ -120,32 +120,32 @@ ELibremidiAPI ULibremidiEngineSubsystem::GetCurrentAPI() const
 	return ELibremidiAPI::Unspecified;
 }
 
-TArray<FMidiPortInfo> ULibremidiEngineSubsystem::GetAvailableInputPorts() const
+TArray<FLibremidiPortInfo> ULibremidiEngineSubsystem::GetAvailableInputPorts() const
 {
-	TArray<FMidiPortInfo> Result;
+	TArray<FLibremidiPortInfo> Result;
 	
 	if (Observer)
 	{
 		auto ports = Observer->get_input_ports();
 		for (const auto& port : ports)
 		{
-			Result.Add(FMidiPortInfo(port));
+			Result.Add(FLibremidiPortInfo(port));
 		}
 	}
 	
 	return Result;
 }
 
-TArray<FMidiPortInfo> ULibremidiEngineSubsystem::GetAvailableOutputPorts() const
+TArray<FLibremidiPortInfo> ULibremidiEngineSubsystem::GetAvailableOutputPorts() const
 {
-	TArray<FMidiPortInfo> Result;
+	TArray<FLibremidiPortInfo> Result;
 	
 	if (Observer)
 	{
 		auto ports = Observer->get_output_ports();
 		for (const auto& port : ports)
 		{
-			Result.Add(FMidiPortInfo(port));
+			Result.Add(FLibremidiPortInfo(port));
 		}
 	}
 	
@@ -342,12 +342,15 @@ void ULibremidiEngineSubsystem::HandleWarning(std::string_view WarningText, cons
 
 void ULibremidiEngineSubsystem::HandleInputDeviceAdded(const libremidi::input_port& Port) const
 {
-	FMidiPortInfo PortInfo(Port);
+	FLibremidiPortInfo PortInfo(Port);
 	
 	// Only log detailed info on hot-plug events, not during initialization
 	if (bLoggedInitialDevices)
 	{
 		LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, true);
+		
+		// Fire hot-plug delegate for auto-reconnection
+		OnInputPortConnected.Broadcast(PortInfo);
 	}
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
@@ -361,7 +364,7 @@ void ULibremidiEngineSubsystem::HandleInputDeviceAdded(const libremidi::input_po
 
 void ULibremidiEngineSubsystem::HandleInputDeviceRemoved(const libremidi::input_port& Port) const
 {
-	FMidiPortInfo PortInfo(Port);
+	FLibremidiPortInfo PortInfo(Port);
 	
 	UE_LOG(LogLibremidi4UE, Log, TEXT("=== DEVICE DISCONNECTED: Input Port ==="));
 	UE_LOG(LogLibremidi4UE, Log, TEXT("  Display Name: %s"), *PortInfo.DisplayName);
@@ -378,12 +381,15 @@ void ULibremidiEngineSubsystem::HandleInputDeviceRemoved(const libremidi::input_
 
 void ULibremidiEngineSubsystem::HandleOutputDeviceAdded(const libremidi::output_port& Port) const
 {
-	FMidiPortInfo PortInfo(Port);
+	FLibremidiPortInfo PortInfo(Port);
 	
 	// Only log detailed info on hot-plug events, not during initialization
 	if (bLoggedInitialDevices)
 	{
 		LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, false);
+		
+		// Fire hot-plug delegate for auto-reconnection
+		OnOutputPortReconnected.Broadcast(PortInfo);
 	}
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
@@ -397,7 +403,7 @@ void ULibremidiEngineSubsystem::HandleOutputDeviceAdded(const libremidi::output_
 
 void ULibremidiEngineSubsystem::HandleOutputDeviceRemoved(const libremidi::output_port& Port) const
 {
-	FMidiPortInfo PortInfo(Port);
+	FLibremidiPortInfo PortInfo(Port);
 	
 	UE_LOG(LogLibremidi4UE, Log, TEXT("=== DEVICE DISCONNECTED: Output Port ==="));
 	UE_LOG(LogLibremidi4UE, Log, TEXT("  Display Name: %s"), *PortInfo.DisplayName);
@@ -442,7 +448,7 @@ TArray<ULibremidiOutput*> ULibremidiEngineSubsystem::GetActiveOutputPorts() cons
 	return Result;
 }
 
-ULibremidiInput* ULibremidiEngineSubsystem::FindActiveInputPort(const FMidiPortInfo& PortInfo) const
+ULibremidiInput* ULibremidiEngineSubsystem::FindActiveInputPort(const FLibremidiPortInfo& PortInfo) const
 {
 	if (!PortInfo.IsValid())
 	{
@@ -453,7 +459,7 @@ ULibremidiInput* ULibremidiEngineSubsystem::FindActiveInputPort(const FMidiPortI
 	{
 		if (Port && Port->IsPortOpen())
 		{
-			const FMidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
+			const FLibremidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
 			if (CurrentInfo == PortInfo)
 			{
 				return Port;
@@ -463,7 +469,7 @@ ULibremidiInput* ULibremidiEngineSubsystem::FindActiveInputPort(const FMidiPortI
 	return nullptr;
 }
 
-ULibremidiOutput* ULibremidiEngineSubsystem::FindActiveOutputPort(const FMidiPortInfo& PortInfo) const
+ULibremidiOutput* ULibremidiEngineSubsystem::FindActiveOutputPort(const FLibremidiPortInfo& PortInfo) const
 {
 	if (!PortInfo.IsValid())
 	{
@@ -474,7 +480,7 @@ ULibremidiOutput* ULibremidiEngineSubsystem::FindActiveOutputPort(const FMidiPor
 	{
 		if (Port && Port->IsPortOpen())
 		{
-			const FMidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
+			const FLibremidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
 			if (CurrentInfo == PortInfo)
 			{
 				return Port;

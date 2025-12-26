@@ -10,10 +10,26 @@ THIRD_PARTY_INCLUDES_END
 
 #include "LibremidiEngineSubsystem.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiInputDeviceChanged, const FMidiPortInfo&, PortInfo);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiOutputDeviceChanged, const FMidiPortInfo&, PortInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiInputDeviceChanged, const FLibremidiPortInfo&, PortInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiOutputDeviceChanged, const FLibremidiPortInfo&, PortInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnMidiError, const FString&, ErrorMessage, const FString&, FileName, int32, LineNumber);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnMidiWarning, const FString&, WarningMessage, const FString&, FileName, int32, LineNumber);
+
+// ========================================================================
+// Hot-plug delegates for auto-reconnection
+// ========================================================================
+
+/**
+ * Delegate for input port hot-plug events (for auto-reconnection)
+ * @param PortInfo Information about the reconnected port
+ */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnInputPortConnected, const FLibremidiPortInfo&);
+
+/**
+ * Delegate for output port hot-plug events (for auto-reconnection)
+ * @param PortInfo Information about the reconnected port
+ */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnOutputPortConnected, const FLibremidiPortInfo&);
 
 UCLASS()
 class LIBREMIDI4UE_API ULibremidiEngineSubsystem : public UEngineSubsystem
@@ -41,6 +57,22 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
 	FOnMidiWarning OnWarning;
+
+	// ========================================================================
+	// Hot-plug Events (for auto-reconnection)
+	// ========================================================================
+
+	/**
+	 * Native delegate for input port reconnection (not exposed to Blueprint)
+	 * Used by ULibremidiInput instances for auto-reconnection logic
+	 */
+	FOnInputPortConnected OnInputPortConnected;
+
+	/**
+	 * Native delegate for output port reconnection (not exposed to Blueprint)
+	 * Used by ULibremidiOutput instances for auto-reconnection logic
+	 */
+	FOnOutputPortConnected OnOutputPortReconnected;
 
 	UFUNCTION(BlueprintCallable, Category = "MIDI|Configuration", meta = (DisplayName = "Set MIDI API", ToolTip = "Set the MIDI API to use. Observer will be restarted."))
 	void SetMidiAPI(ELibremidiAPI API);
@@ -70,10 +102,10 @@ public:
 	ELibremidiAPI GetCurrentAPI() const;
 
 	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Available Input Ports"))
-	TArray<FMidiPortInfo> GetAvailableInputPorts() const;
+	TArray<FLibremidiPortInfo> GetAvailableInputPorts() const;
 
 	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Available Output Ports"))
-	TArray<FMidiPortInfo> GetAvailableOutputPorts() const;
+	TArray<FLibremidiPortInfo> GetAvailableOutputPorts() const;
 
 	// ============================================================================
 	// Port Management
@@ -98,14 +130,14 @@ public:
 	 * @param PortInfo The port info to search for
 	 * @return The active input port, or nullptr if not found
 	 */
-	ULibremidiInput* FindActiveInputPort(const FMidiPortInfo& PortInfo) const;
+	ULibremidiInput* FindActiveInputPort(const FLibremidiPortInfo& PortInfo) const;
 
 	/**
 	 * Find an active output port by port info
 	 * @param PortInfo The port info to search for
 	 * @return The active output port, or nullptr if not found
 	 */
-	ULibremidiOutput* FindActiveOutputPort(const FMidiPortInfo& PortInfo) const;
+	ULibremidiOutput* FindActiveOutputPort(const FLibremidiPortInfo& PortInfo) const;
 
 private:
 	TUniquePtr<libremidi::observer> Observer;

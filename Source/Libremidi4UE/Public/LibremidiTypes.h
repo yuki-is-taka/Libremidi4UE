@@ -152,7 +152,7 @@ enum class ELibremidiControlChange : uint8
  * Contains all metadata about a MIDI port including hardware identifiers and descriptive names
  */
 USTRUCT(BlueprintType)
-struct LIBREMIDI4UE_API FMidiPortInfo
+struct LIBREMIDI4UE_API FLibremidiPortInfo
 {
 	GENERATED_BODY()
 
@@ -213,19 +213,19 @@ struct LIBREMIDI4UE_API FMidiPortInfo
 	ELibremidiPortType PortType = ELibremidiPortType::Unknown;
 
 	/** Default constructor */
-	FMidiPortInfo() = default;
+	FLibremidiPortInfo() = default;
 
 	/** Construct from libremidi port_information */
-	explicit FMidiPortInfo(const libremidi::port_information& InPort);
+	explicit FLibremidiPortInfo(const libremidi::port_information& InPort);
 
 	/** Equality operator - compares by handle */
-	bool operator==(const FMidiPortInfo& Other) const
+	bool operator==(const FLibremidiPortInfo& Other) const
 	{
 		return ClientHandle == Other.ClientHandle && PortHandle == Other.PortHandle;
 	}
 
 	/** Inequality operator */
-	bool operator!=(const FMidiPortInfo& Other) const
+	bool operator!=(const FLibremidiPortInfo& Other) const
 	{
 		return !(*this == Other);
 	}
