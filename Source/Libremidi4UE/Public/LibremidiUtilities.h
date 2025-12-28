@@ -123,6 +123,106 @@ public:
 	UFUNCTION(BlueprintPure, Category = "MIDI|Utilities", meta = (DisplayName = "Is Valid Channel"))
 	static bool IsValidChannel(int32 Channel);
 
+	// ============================================================================
+	// Port Management Utilities
+	// ============================================================================
+
+	/**
+	 * Close all active MIDI input ports
+	 * @param WorldContextObject Context object
+	 * @return Number of ports closed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Close All Input Ports", WorldContext = "WorldContextObject"))
+	static int32 CloseAllInputPorts(UObject* WorldContextObject);
+
+	/**
+	 * Close all active MIDI output ports
+	 * @param WorldContextObject Context object
+	 * @return Number of ports closed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Close All Output Ports", WorldContext = "WorldContextObject"))
+	static int32 CloseAllOutputPorts(UObject* WorldContextObject);
+
+	/**
+	 * Close all active MIDI input and output ports
+	 * @param WorldContextObject Context object
+	 * @return Total number of ports closed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Close All MIDI Ports", WorldContext = "WorldContextObject"))
+	static int32 CloseAllMidiPorts(UObject* WorldContextObject);
+
+	/**
+	 * Get all currently active input ports
+	 * @param WorldContextObject Context object
+	 * @return Array of active input ports
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Get Active Input Ports", WorldContext = "WorldContextObject"))
+	static TArray<ULibremidiInput*> GetActiveInputPorts(UObject* WorldContextObject);
+
+	/**
+	 * Get all currently active output ports
+	 * @param WorldContextObject Context object
+	 * @return Array of active output ports
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Get Active Output Ports", WorldContext = "WorldContextObject"))
+	static TArray<ULibremidiOutput*> GetActiveOutputPorts(UObject* WorldContextObject);
+
+	/**
+	 * Find an active input port by display name
+	 * @param WorldContextObject Context object
+	 * @param DisplayName Display name to search for
+	 * @return Found input port, or nullptr if not found
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Find Input Port By Name", WorldContext = "WorldContextObject"))
+	static ULibremidiInput* FindInputPortByName(UObject* WorldContextObject, const FString& DisplayName);
+
+	/**
+	 * Find an active output port by display name
+	 * @param WorldContextObject Context object
+	 * @param DisplayName Display name to search for
+	 * @return Found output port, or nullptr if not found
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Find Output Port By Name", WorldContext = "WorldContextObject"))
+	static ULibremidiOutput* FindOutputPortByName(UObject* WorldContextObject, const FString& DisplayName);
+
+	/**
+	 * Get the number of active input ports
+	 * @param WorldContextObject Context object
+	 * @return Number of active input ports
+	 */
+	UFUNCTION(BlueprintPure, Category = "MIDI|Utilities", meta = (DisplayName = "Get Active Input Port Count", WorldContext = "WorldContextObject"))
+	static int32 GetActiveInputPortCount(UObject* WorldContextObject);
+
+	/**
+	 * Get the number of active output ports
+	 * @param WorldContextObject Context object
+	 * @return Number of active output ports
+	 */
+	UFUNCTION(BlueprintPure, Category = "MIDI|Utilities", meta = (DisplayName = "Get Active Output Port Count", WorldContext = "WorldContextObject"))
+	static int32 GetActiveOutputPortCount(UObject* WorldContextObject);
+
+	/**
+	 * Open a MIDI input port by display name (convenience function)
+	 * Returns existing instance if the port is already open.
+	 * @param WorldContextObject Context object
+	 * @param DisplayName Display name of the port to open
+	 * @param ClientName Optional client name
+	 * @return Opened input port (existing or new), or nullptr if port not found or failed to open
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Open Input Port By Name", WorldContext = "WorldContextObject"))
+	static ULibremidiInput* OpenInputPortByName(UObject* WorldContextObject, const FString& DisplayName, const FString& ClientName = TEXT("Unreal Engine"));
+
+	/**
+	 * Open a MIDI output port by display name (convenience function)
+	 * Returns existing instance if the port is already open.
+	 * @param WorldContextObject Context object
+	 * @param DisplayName Display name of the port to open
+	 * @param ClientName Optional client name
+	 * @return Opened output port (existing or new), or nullptr if port not found or failed to open
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Open Output Port By Name", WorldContext = "WorldContextObject"))
+	static ULibremidiOutput* OpenOutputPortByName(UObject* WorldContextObject, const FString& DisplayName, const FString& ClientName = TEXT("Unreal Engine"));
+
 private:
 	static const TArray<FString> NoteNames;
 };

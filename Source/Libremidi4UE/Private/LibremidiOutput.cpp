@@ -30,11 +30,78 @@ THIRD_PARTY_INCLUDES_START
 #include <libremidi/libremidi.hpp>
 THIRD_PARTY_INCLUDES_END
 
+// ============================================================================
+// Private Helper Functions
+// ============================================================================
+
+namespace
+{
+	/**
+	 * Normalization constants for float ? MIDI data conversion.
+	 * Converts normalized float values to maximum resolution supported by MIDI 2.0.
+	 */
+	namespace MidiConversion
+	{
+		constexpr uint32 Velocity16Bit = 65535;      // 0.0-1.0 ? 0-65535 (MIDI 2.0)
+		constexpr uint32 Value32Bit = 4294967295;    // 0.0-1.0 ? 0-4294967295 (MIDI 2.0)
+		constexpr int32  PitchBend32Bit = 2147483647; // -1.0-1.0 ? -2147483648-2147483647 (MIDI 2.0)
+	}
+
+	/**
+	 * Clamp and convert normalized float to high-resolution MIDI 2.0 values.
+	 * libremidi will automatically downsample to MIDI 1.0 if needed.
+	 */
+	FORCEINLINE uint16 FloatToVelocity16(float Value)
+	{
+		return static_cast<uint16>(FMath::Clamp(Value, 0.0f, 1.0f) * MidiConversion::Velocity16Bit);
+	}
+
+	FORCEINLINE uint32 FloatToValue32(float Value)
+	{
+		return static_cast<uint32>(FMath::Clamp(Value, 0.0f, 1.0f) * MidiConversion::Value32Bit);
+	}
+
+	FORCEINLINE int32 FloatToPitchBend32(float Value)
+	{
+		return static_cast<int32>(FMath::Clamp(Value, -1.0f, 1.0f) * MidiConversion::PitchBend32Bit);
+	}
+
+	/**
+	 * Build a MIDI 2.0 UMP message (Type 4, 64-bit channel voice message)
+	 * @param Status MIDI status byte (0x8-0xE)
+	 * @param Channel MIDI channel (0-15)
+	 * @param Data1 First data byte
+	 * @param Data2 Second data value (16-bit or 32-bit)
+	 * @return Two 32-bit UMP words
+	 */
+	FORCEINLINE void BuildUMPMessage(uint32 OutData[2], uint8 Status, int32 Channel, int32 Data1, uint32 Data2)
+	{
+		OutData[0] = (0x4 << 28) | (Status << 20) | (Channel << 16) | (Data1 << 8);
+		OutData[1] = Data2;
+	}
+
+	/**
+	 * Send a UMP message and handle errors
+	 */
+	FORCEINLINE bool SendUMP(libremidi::midi_out* MidiOut, const uint32 Data[2], const TCHAR* ErrorMsg)
+	{
+		if (const auto Error = MidiOut->send_ump(Data, 2); Error != stdx::error{})
+		{
+			return false;
+		}
+		return true;
+	}
+}
+
+// ============================================================================
+// Lifecycle
+// ============================================================================
+
 ULibremidiOutput::ULibremidiOutput(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
+	, bIsVirtualPort(false)
+	, bEnableAutoReconnect(true)
 {
-	bIsVirtualPort = false;
-	bEnableAutoReconnect = true;
 }
 
 void ULibremidiOutput::BeginDestroy()
@@ -43,6 +110,10 @@ void ULibremidiOutput::BeginDestroy()
 	ClosePort();
 	Super::BeginDestroy();
 }
+
+// ============================================================================
+// Factory & Subsystem Access
+// ============================================================================
 
 ULibremidiOutput* ULibremidiOutput::CreateMidiOutput(UObject* WorldContextObject)
 {
@@ -64,6 +135,10 @@ libremidi::output_port ULibremidiOutput::ConvertPortInfo(const FLibremidiPortInf
 {
 	return UE::MIDI::Private::ToLibremidiOutputPort(PortInfo);
 }
+
+// ============================================================================
+// Port Management
+// ============================================================================
 
 bool ULibremidiOutput::CreateMidiOut(libremidi::API API)
 {
@@ -87,11 +162,6 @@ bool ULibremidiOutput::CreateMidiOut(libremidi::API API)
 
 bool ULibremidiOutput::OpenPort(const FLibremidiPortInfo& PortInfo, const FString& ClientName)
 {
-	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
-	{
-		return false;
-	}
-
 	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
 	if (!Subsystem)
 	{
@@ -99,10 +169,37 @@ bool ULibremidiOutput::OpenPort(const FLibremidiPortInfo& PortInfo, const FStrin
 		return false;
 	}
 
-	if (ULibremidiOutput* ExistingPort = Subsystem->FindActiveOutputPort(PortInfo))
+	// Check if this instance already has a port open
+	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: Port '%s' is already open by another instance"), *PortInfo.DisplayName);
-		HandleError(FString::Printf(TEXT("Port '%s' is already open"), *PortInfo.DisplayName));
+		// Check if it's the SAME port we're trying to open
+		if (CurrentPortInfo == PortInfo)
+		{
+			UE_LOG(LogLibremidi4UE, Verbose, TEXT("MidiOutput: Port '%s' is already open by this instance"), 
+				*PortInfo.DisplayName);
+			return true;
+		}
+		
+		// Different port - error
+		const FString ErrorMsg = FString::Printf(
+			TEXT("This instance already has port '%s' open. Close it before opening '%s'"),
+			*CurrentPortInfo.DisplayName,
+			*PortInfo.DisplayName
+		);
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: %s"), *ErrorMsg);
+		HandleError(ErrorMsg);
+		return false;
+	}
+
+	// Check if this port is already open by another instance
+	if (Subsystem->FindActiveOutputPort(PortInfo))
+	{
+		const FString ErrorMsg = FString::Printf(
+			TEXT("Port '%s' is already open by another instance"),
+			*PortInfo.DisplayName
+		);
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: %s"), *ErrorMsg);
+		HandleError(ErrorMsg);
 		return false;
 	}
 
@@ -120,14 +217,11 @@ bool ULibremidiOutput::OpenPort(const FLibremidiPortInfo& PortInfo, const FStrin
 		return false;
 	}
 
-	// Store last client name for auto-reconnection
 	LastClientName = ClientName;
-
 	NotifyPortOpened(PortInfo, false);
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened port '%s' with API: %s (UMP processing)"), 
-		*PortInfo.DisplayName, 
-		*UEnum::GetValueAsString(API));
+		*PortInfo.DisplayName, *UEnum::GetValueAsString(API));
 	return true;
 }
 
@@ -135,6 +229,7 @@ bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 {
 	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
 	{
+		HandleError(TEXT("Port is already open"));
 		return false;
 	}
 
@@ -164,12 +259,10 @@ bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 	VirtualPortInfo.PortName = PortName;
 	
 	LastClientName = PortName;
-	
 	NotifyPortOpened(VirtualPortInfo, true);
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened virtual port '%s' with API: %s (UMP processing)"), 
-		*PortName, 
-		*UEnum::GetValueAsString(API));
+		*PortName, *UEnum::GetValueAsString(API));
 	return true;
 }
 
@@ -193,11 +286,34 @@ bool ULibremidiOutput::ClosePort()
 	}
 
 	NotifyPortClosed();
-
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Port closed"));
 	MidiOut.Reset();
 	return true;
 }
+
+// ============================================================================
+// Port Status
+// ============================================================================
+
+bool ULibremidiOutput::IsPortOpen() const
+{
+	return MidiOut && MidiOut->is_port_open();
+}
+
+bool ULibremidiOutput::IsPortConnected() const
+{
+	return MidiOut && MidiOut->is_port_connected();
+}
+
+ELibremidiAPI ULibremidiOutput::GetCurrentAPI() const
+{
+	return MidiOut ? LibremidiTypeConversion::FromLibremidiAPI(MidiOut->get_current_api()) 
+	               : ELibremidiAPI::Unspecified;
+}
+
+// ============================================================================
+// Raw Message Sending
+// ============================================================================
 
 bool ULibremidiOutput::SendMessage(const TArray<uint8>& Data)
 {
@@ -206,6 +322,23 @@ bool ULibremidiOutput::SendMessage(const TArray<uint8>& Data)
 		HandleError(TEXT("Port is not open"));
 		return false;
 	}
+
+	// Log raw MIDI message
+	FString DataStr;
+	const int32 DisplayCount = FMath::Min(Data.Num(), 16);
+	DataStr.Reserve(DisplayCount * 3 + 4);
+	
+	for (int32 i = 0; i < DisplayCount; ++i)
+	{
+		DataStr += FString::Printf(TEXT("%02X "), Data[i]);
+	}
+	if (Data.Num() > 16)
+	{
+		DataStr += TEXT("...");
+	}
+	
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Raw MIDI1.0 Size:%d Data:[%s]"), 
+		Data.Num(), *DataStr);
 
 	libremidi::message Msg;
 	Msg.bytes.assign(Data.GetData(), Data.GetData() + Data.Num());
@@ -233,6 +366,18 @@ bool ULibremidiOutput::SendMessageUMP(const TArray<uint32>& Data)
 		return false;
 	}
 
+	// Log UMP message
+	FString DataStr;
+	DataStr.Reserve(Data.Num() * 9);
+	
+	for (int32 i = 0; i < Data.Num(); ++i)
+	{
+		DataStr += FString::Printf(TEXT("%08X "), Data[i]);
+	}
+	
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Raw UMP Words:%d Data:[%s]"), 
+		Data.Num(), *DataStr);
+
 	if (const auto Error = MidiOut->send_ump(Data.GetData(), Data.Num()); Error != stdx::error{})
 	{
 		HandleError(TEXT("Failed to send UMP message"));
@@ -242,21 +387,9 @@ bool ULibremidiOutput::SendMessageUMP(const TArray<uint32>& Data)
 	return true;
 }
 
-bool ULibremidiOutput::IsPortOpen() const
-{
-	return MidiOut && MidiOut->is_port_open();
-}
-
-bool ULibremidiOutput::IsPortConnected() const
-{
-	return MidiOut && MidiOut->is_port_connected();
-}
-
-ELibremidiAPI ULibremidiOutput::GetCurrentAPI() const
-{
-	return MidiOut ? LibremidiTypeConversion::FromLibremidiAPI(MidiOut->get_current_api()) 
-	               : ELibremidiAPI::Unspecified;
-}
+// ============================================================================
+// Configuration & Error Handling
+// ============================================================================
 
 libremidi::output_configuration ULibremidiOutput::CreateOutputConfiguration()
 {
@@ -288,7 +421,6 @@ void ULibremidiOutput::NotifyPortOpened(const FLibremidiPortInfo& PortInfo, bool
 		Subsystem->RegisterOutputPort(this);
 	}
 
-	// Fire OnPortOpened delegate
 	OnPortOpened.Broadcast(PortInfo);
 }
 
@@ -337,10 +469,8 @@ void ULibremidiOutput::RegisterHotPlugDelegate()
 		return;
 	}
 
-	// Unregister first if already registered
 	UnregisterHotPlugDelegate();
 
-	// Register delegate for hot-plug events
 	HotPlugDelegateHandle = Subsystem->OnOutputPortReconnected.AddUObject(
 		this, 
 		&ULibremidiOutput::HandleHotPlugEvent
@@ -362,19 +492,11 @@ void ULibremidiOutput::UnregisterHotPlugDelegate()
 
 void ULibremidiOutput::HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedPort)
 {
-	// Check if auto-reconnection is enabled
-	if (!bEnableAutoReconnect)
+	if (!bEnableAutoReconnect || (IsPortOpen() && IsPortConnected()))
 	{
 		return;
 	}
 
-	// Check if currently disconnected
-	if (IsPortOpen() && IsPortConnected())
-	{
-		return;
-	}
-
-	// Check if this is the port we were connected to
 	const bool bSamePort = 
 		(ReconnectedPort.DisplayName == LastDisconnectedPort.DisplayName) ||
 		(ReconnectedPort.ClientHandle == LastDisconnectedPort.ClientHandle && 
@@ -385,17 +507,14 @@ void ULibremidiOutput::HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedP
 		return;
 	}
 
-	// Attempt to reconnect
 	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Attempting auto-reconnection to '%s'"), 
 		*ReconnectedPort.DisplayName);
 
-	// Close existing port if still open
 	if (IsPortOpen())
 	{
 		ClosePort();
 	}
 
-	// Try to reopen the port
 	if (OpenPort(ReconnectedPort, LastClientName))
 	{
 		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Auto-reconnection successful"));
@@ -409,38 +528,6 @@ void ULibremidiOutput::HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedP
 // ============================================================================
 // High-Level MIDI Message Sending (Normalized Float to High-Resolution)
 // ============================================================================
-namespace
-{
-	/**
-	 * Normalization constants for float ? MIDI data conversion.
-	 * Converts normalized float values to maximum resolution supported by MIDI 2.0.
-	 */
-	namespace MidiDenormalization
-	{
-		constexpr uint32 Velocity16Bit = 65535;      // 0.0-1.0 ? 0-65535 (MIDI 2.0)
-		constexpr uint32 Value32Bit = 4294967295;    // 0.0-1.0 ? 0-4294967295 (MIDI 2.0)
-		constexpr int32  PitchBend32Bit = 2147483647; // -1.0-1.0 ? -2147483648-2147483647 (MIDI 2.0)
-	}
-
-	/**
-	 * Clamp and convert normalized float to high-resolution MIDI 2.0 values.
-	 * libremidi will automatically downsample to MIDI 1.0 if needed.
-	 */
-	FORCEINLINE uint16 FloatToVelocity16(float Value)
-	{
-		return static_cast<uint16>(FMath::Clamp(Value, 0.0f, 1.0f) * MidiDenormalization::Velocity16Bit);
-	}
-
-	FORCEINLINE uint32 FloatToValue32(float Value)
-	{
-		return static_cast<uint32>(FMath::Clamp(Value, 0.0f, 1.0f) * MidiDenormalization::Value32Bit);
-	}
-
-	FORCEINLINE int32 FloatToPitchBend32(float Value)
-	{
-		return static_cast<int32>(FMath::Clamp(Value, -1.0f, 1.0f) * MidiDenormalization::PitchBend32Bit);
-	}
-}
 
 bool ULibremidiOutput::SendNoteOn(int32 Channel, int32 Note, float Velocity)
 {
@@ -454,18 +541,17 @@ bool ULibremidiOutput::SendNoteOn(int32 Channel, int32 Note, float Velocity)
 	Note = FLibremidiUtils::ClampNote(Note);
 	const uint16 Vel16 = FloatToVelocity16(Velocity);
 
-	// Build MIDI 2.0 UMP Note On message (Type 4, 64-bit)
-	const uint32 Word0 = (0x4 << 28) | (0x9 << 20) | (Channel << 16) | (Note << 8);
-	const uint32 Word1 = ( Vel16 << 16);
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d NoteOn Note:%d Vel:%.3f (Raw16:%d)"), 
+		Channel, Note, Velocity, Vel16);
 
-	const uint32 UMPData[] = {Word0, Word1};
-
-	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	uint32 UMPData[2];
+	BuildUMPMessage(UMPData, 0x9, Channel, Note, Vel16 << 16);
+	
+	if (!SendUMP(MidiOut.Get(), UMPData, TEXT("Failed to send Note On")))
 	{
 		HandleError(TEXT("Failed to send Note On"));
 		return false;
 	}
-
 	return true;
 }
 
@@ -481,18 +567,17 @@ bool ULibremidiOutput::SendNoteOff(int32 Channel, int32 Note, float Velocity)
 	Note = FLibremidiUtils::ClampNote(Note);
 	const uint16 Vel16 = FloatToVelocity16(Velocity);
 
-	// Build MIDI 2.0 UMP Note Off message (Type 4, 64-bit)
-	const uint32 Word0 = (0x4 << 28) | (0x8 << 20) | (Channel << 16) | (Note << 8);
-	const uint32 Word1 = ( Vel16 << 16);
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d NoteOff Note:%d Vel:%.3f (Raw16:%d)"), 
+		Channel, Note, Velocity, Vel16);
 
-	const uint32 UMPData[] = {Word0, Word1};
-
-	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	uint32 UMPData[2];
+	BuildUMPMessage(UMPData, 0x8, Channel, Note, Vel16 << 16);
+	
+	if (!SendUMP(MidiOut.Get(), UMPData, TEXT("Failed to send Note Off")))
 	{
 		HandleError(TEXT("Failed to send Note Off"));
 		return false;
 	}
-
 	return true;
 }
 
@@ -508,18 +593,17 @@ bool ULibremidiOutput::SendControlChange(int32 Channel, int32 Controller, float 
 	Controller = FLibremidiUtils::ClampController(Controller);
 	const uint32 Val32 = FloatToValue32(Value);
 
-	// Build MIDI 2.0 UMP Control Change message (Type 4, 64-bit)
-	const uint32 Word0 = (0x4 << 28) | (0xB << 20) | (Channel << 16) | (Controller << 8);
-	const uint32 Word1 = Val32;
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d CC:%d Val:%.3f (Raw32:%u)"), 
+		Channel, Controller, Value, Val32);
 
-	const uint32 UMPData[] = {Word0, Word1};
-
-	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	uint32 UMPData[2];
+	BuildUMPMessage(UMPData, 0xB, Channel, Controller, Val32);
+	
+	if (!SendUMP(MidiOut.Get(), UMPData, TEXT("Failed to send Control Change")))
 	{
 		HandleError(TEXT("Failed to send Control Change"));
 		return false;
 	}
-
 	return true;
 }
 
@@ -534,18 +618,17 @@ bool ULibremidiOutput::SendProgramChange(int32 Channel, int32 Program)
 	Channel = FLibremidiUtils::ClampChannel(Channel);
 	Program = FLibremidiUtils::ClampProgram(Program);
 
-	// Build MIDI 2.0 UMP Program Change message (Type 4, 64-bit)
-	const uint32 Word0 = (0x4 << 28) | (0xC << 20) | (Channel << 16);
-	const uint32 Word1 = (Program << 24);
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d ProgramChange Prog:%d"), 
+		Channel, Program);
 
-	const uint32 UMPData[] = {Word0, Word1};
-
-	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	uint32 UMPData[2];
+	BuildUMPMessage(UMPData, 0xC, Channel, 0, Program << 24);
+	
+	if (!SendUMP(MidiOut.Get(), UMPData, TEXT("Failed to send Program Change")))
 	{
 		HandleError(TEXT("Failed to send Program Change"));
 		return false;
 	}
-
 	return true;
 }
 
@@ -560,18 +643,17 @@ bool ULibremidiOutput::SendPitchBend(int32 Channel, float Value)
 	Channel = FLibremidiUtils::ClampChannel(Channel);
 	const uint32 Bend32 = static_cast<uint32>(FloatToPitchBend32(Value));
 
-	// Build MIDI 2.0 UMP Pitch Bend message (Type 4, 64-bit)
-	const uint32 Word0 = (0x4 << 28) | (0xE << 20) | (Channel << 16);
-	const uint32 Word1 = Bend32;
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d PitchBend Val:%.3f (Raw32:%u)"), 
+		Channel, Value, Bend32);
 
-	const uint32 UMPData[] = {Word0, Word1};
-
-	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	uint32 UMPData[2];
+	BuildUMPMessage(UMPData, 0xE, Channel, 0, Bend32);
+	
+	if (!SendUMP(MidiOut.Get(), UMPData, TEXT("Failed to send Pitch Bend")))
 	{
 		HandleError(TEXT("Failed to send Pitch Bend"));
 		return false;
 	}
-
 	return true;
 }
 
@@ -586,18 +668,17 @@ bool ULibremidiOutput::SendChannelPressure(int32 Channel, float Pressure)
 	Channel = FLibremidiUtils::ClampChannel(Channel);
 	const uint32 Press32 = FloatToValue32(Pressure);
 
-	// Build MIDI 2.0 UMP Channel Pressure message (Type 4, 64-bit)
-	const uint32 Word0 = (0x4 << 28) | (0xD << 20) | (Channel << 16);
-	const uint32 Word1 = Press32;
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d ChannelPressure Press:%.3f (Raw32:%u)"), 
+		Channel, Pressure, Press32);
 
-	const uint32 UMPData[] = {Word0, Word1};
-
-	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	uint32 UMPData[2];
+	BuildUMPMessage(UMPData, 0xD, Channel, 0, Press32);
+	
+	if (!SendUMP(MidiOut.Get(), UMPData, TEXT("Failed to send Channel Pressure")))
 	{
 		HandleError(TEXT("Failed to send Channel Pressure"));
 		return false;
 	}
-
 	return true;
 }
 
@@ -613,18 +694,17 @@ bool ULibremidiOutput::SendPolyPressure(int32 Channel, int32 Note, float Pressur
 	Note = FLibremidiUtils::ClampNote(Note);
 	const uint32 Press32 = FloatToValue32(Pressure);
 
-	// Build MIDI 2.0 UMP Polyphonic Key Pressure message (Type 4, 64-bit)
-	const uint32 Word0 = (0x4 << 28) | (0xA << 20) | (Channel << 16) | (Note << 8);
-	const uint32 Word1 = Press32;
+	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d PolyPressure Note:%d Press:%.3f (Raw32:%u)"), 
+		Channel, Note, Pressure, Press32);
 
-	const uint32 UMPData[] = {Word0, Word1};
-
-	if (const auto Error = MidiOut->send_ump(UMPData, 2); Error != stdx::error{})
+	uint32 UMPData[2];
+	BuildUMPMessage(UMPData, 0xA, Channel, Note, Press32);
+	
+	if (!SendUMP(MidiOut.Get(), UMPData, TEXT("Failed to send Poly Pressure")))
 	{
 		HandleError(TEXT("Failed to send Poly Pressure"));
 		return false;
 	}
-
 	return true;
 }
 
