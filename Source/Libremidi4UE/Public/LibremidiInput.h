@@ -290,7 +290,7 @@ private:
 
 	libremidi::ump_input_configuration CreateInputConfigurationUMP();
 	
-	void HandleMidiMessageUMP(libremidi::ump&& Message);
+	void OnUMPMessageReceived(libremidi::ump&& Message);
 	void HandleError(const FString& ErrorMessage);
 
 	void NotifyPortOpened(const FLibremidiPortInfo& PortInfo, bool bVirtual);
@@ -301,9 +301,9 @@ private:
 	void UnregisterHotPlugDelegate();
 	void HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedPort);
 
-	void ParseAndBroadcastUMP(const TArray<uint32>& Data, int64 Timestamp);
-	void ParseAndBroadcastUMPSystem(const TArray<uint32>& Data, int64 Timestamp);
-	void ParseAndBroadcastUMPMidi1(const TArray<uint32>& Data, int64 Timestamp);
-	void ParseAndBroadcastUMPMidi2(const TArray<uint32>& Data, int64 Timestamp);
-	void ParseAndBroadcastUMPSysEx(const TArray<uint32>& Data, int64 Timestamp);
+	void ProcessUMP(const TArray<uint32>& Data, int64 Timestamp);
+	void ProcessUMPSystem(const TArray<uint32>& Data, int64 Timestamp);
+	void ProcessUMPMidi1(const TArray<uint32>& Data, int64 Timestamp);
+	void ProcessUMPMidi2(const TArray<uint32>& Data, int64 Timestamp);
+	void ProcessUMPSysEx(const TArray<uint32>& Data, int64 Timestamp);
 };

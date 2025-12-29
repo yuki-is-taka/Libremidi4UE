@@ -55,7 +55,7 @@ void ULibremidiEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	StartObserver();
 
 	LogAvailableAPIs();
-	LogInitialDevices();
+	LogAvailableDevices();
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem initialized"));
 }
@@ -172,8 +172,6 @@ void ULibremidiEngineSubsystem::StartObserver()
 	UE_LOG(LogLibremidi4UE, Log, TEXT("  Track Hardware: %s"), bTrackHardware ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogLibremidi4UE, Log, TEXT("  Track Virtual: %s"), bTrackVirtual ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogLibremidi4UE, Log, TEXT("  Track Any: %s"), bTrackAny ? TEXT("true") : TEXT("false"));
-	
-	bLoggedInitialDevices = false;
 }
 
 void ULibremidiEngineSubsystem::StopObserver()
@@ -190,7 +188,7 @@ void ULibremidiEngineSubsystem::RestartObserver()
 	UE_LOG(LogLibremidi4UE, Log, TEXT("Restarting MIDI Observer with new configuration..."));
 	StopObserver();
 	StartObserver();
-	LogInitialDevices();
+	LogAvailableDevices();
 }
 
 void ULibremidiEngineSubsystem::LogAvailableAPIs() const
@@ -218,20 +216,24 @@ void ULibremidiEngineSubsystem::LogAvailableAPIs() const
 	}
 }
 
-void ULibremidiEngineSubsystem::LogInitialDevices()
+void ULibremidiEngineSubsystem::LogAvailableDevices()
 {
-	if (!Observer || bLoggedInitialDevices)
+	if (!Observer)
 	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("Observer is not initialized. Cannot log devices."));
 		return;
 	}
 
 	std::vector<libremidi::input_port> input_ports = Observer->get_input_ports();
-	UE_LOG(LogLibremidi4UE, Log, TEXT("=== Currently Connected MIDI Devices ==="));
+	UE_LOG(LogLibremidi4UE, Log, TEXT("=============================================="));
+	UE_LOG(LogLibremidi4UE, Log, TEXT("  Available MIDI Devices"));
+	UE_LOG(LogLibremidi4UE, Log, TEXT("  (Connected to system, not necessarily open)"));
+	UE_LOG(LogLibremidi4UE, Log, TEXT("=============================================="));
 	UE_LOG(LogLibremidi4UE, Log, TEXT("Found %d MIDI input port(s)"), input_ports.size());
 	
 	for (const libremidi::input_port& port : input_ports)
 	{
-		LogDetailedPortInformation(TEXT("EXISTING INPUT DEVICE"), port, true);
+		LogDetailedPortInformation(TEXT("AVAILABLE INPUT DEVICE"), port, true);
 	}
 	
 	std::vector<libremidi::output_port> output_ports = Observer->get_output_ports();
@@ -239,10 +241,8 @@ void ULibremidiEngineSubsystem::LogInitialDevices()
 	
 	for (const libremidi::output_port& port : output_ports)
 	{
-		LogDetailedPortInformation(TEXT("EXISTING OUTPUT DEVICE"), port, false);
+		LogDetailedPortInformation(TEXT("AVAILABLE OUTPUT DEVICE"), port, false);
 	}
-	
-	bLoggedInitialDevices = true;
 }
 
 libremidi::observer_configuration ULibremidiEngineSubsystem::CreateObserverConfiguration() const
@@ -344,14 +344,11 @@ void ULibremidiEngineSubsystem::HandleInputDeviceAdded(const libremidi::input_po
 {
 	FLibremidiPortInfo PortInfo(Port);
 	
-	// Only log detailed info on hot-plug events, not during initialization
-	if (bLoggedInitialDevices)
-	{
-		LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, true);
-		
-		// Fire hot-plug delegate for auto-reconnection
-		OnInputPortConnected.Broadcast(PortInfo);
-	}
+	// Log detailed info on hot-plug events
+	LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, true);
+	
+	// Fire hot-plug delegate for auto-reconnection
+	OnInputPortConnected.Broadcast(PortInfo);
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
 	{
@@ -383,14 +380,11 @@ void ULibremidiEngineSubsystem::HandleOutputDeviceAdded(const libremidi::output_
 {
 	FLibremidiPortInfo PortInfo(Port);
 	
-	// Only log detailed info on hot-plug events, not during initialization
-	if (bLoggedInitialDevices)
-	{
-		LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, false);
-		
-		// Fire hot-plug delegate for auto-reconnection
-		OnOutputPortReconnected.Broadcast(PortInfo);
-	}
+	// Log detailed info on hot-plug events
+	LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, false);
+	
+	// Fire hot-plug delegate for auto-reconnection
+	OnOutputPortReconnected.Broadcast(PortInfo);
 
 	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
 	{

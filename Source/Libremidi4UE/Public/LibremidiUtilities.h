@@ -223,6 +223,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MIDI|Utilities", meta = (DisplayName = "Open Output Port By Name", WorldContext = "WorldContextObject"))
 	static ULibremidiOutput* OpenOutputPortByName(UObject* WorldContextObject, const FString& DisplayName, const FString& ClientName = TEXT("Unreal Engine"));
 
+	// ============================================================================
+	// Debug Utilities
+	// ============================================================================
+
+	/**
+	 * Log all MIDI devices currently available on the system.
+	 * This displays detailed information about all connected MIDI devices.
+	 * @param WorldContextObject Context object
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Debug", meta = (DisplayName = "Log Available MIDI Devices", WorldContext = "WorldContextObject"))
+	static void LogAvailableMidiDevices(UObject* WorldContextObject);
+
 private:
 	static const TArray<FString> NoteNames;
 };

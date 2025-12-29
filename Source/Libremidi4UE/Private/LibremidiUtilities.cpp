@@ -219,7 +219,7 @@ int32 ULibremidiUtilities::CloseAllInputPorts(UObject* WorldContextObject)
 		}
 	}
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("Closed %d input port(s)"), ClosedCount);
+	UE_LOG(LogLibremidi4UE, Log, TEXT("CloseAllInputPorts: Closed %d input port(s)"), ClosedCount);
 	return ClosedCount;
 }
 
@@ -247,7 +247,7 @@ int32 ULibremidiUtilities::CloseAllOutputPorts(UObject* WorldContextObject)
 		}
 	}
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("Closed %d output port(s)"), ClosedCount);
+	UE_LOG(LogLibremidi4UE, Log, TEXT("CloseAllOutputPorts: Closed %d output port(s)"), ClosedCount);
 	return ClosedCount;
 }
 
@@ -257,7 +257,7 @@ int32 ULibremidiUtilities::CloseAllMidiPorts(UObject* WorldContextObject)
 	const int32 OutputsClosed = CloseAllOutputPorts(WorldContextObject);
 	const int32 TotalClosed = InputsClosed + OutputsClosed;
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("Closed total %d MIDI port(s) (%d inputs, %d outputs)"), 
+	UE_LOG(LogLibremidi4UE, Log, TEXT("CloseAllMidiPorts: Closed %d total (%d inputs, %d outputs)"), 
 		TotalClosed, InputsClosed, OutputsClosed);
 
 	return TotalClosed;
@@ -325,23 +325,22 @@ ULibremidiInput* ULibremidiUtilities::OpenInputPortByName(UObject* WorldContextO
 {
 	if (!WorldContextObject)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("OpenInputPortByName: Invalid WorldContextObject"));
+		UE_LOG(LogLibremidi4UE, Error, TEXT("OpenInputPortByName: Invalid WorldContextObject"));
 		return nullptr;
 	}
 
 	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
 	if (!Subsystem)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("OpenInputPortByName: Failed to get LibremidiEngineSubsystem"));
+		UE_LOG(LogLibremidi4UE, Error, TEXT("OpenInputPortByName: Failed to get LibremidiEngineSubsystem"));
 		return nullptr;
 	}
 
-	// First, check if this port is already open
-	// If so, return the existing instance instead of creating a new one
+	// Check if port is already open
 	ULibremidiInput* ExistingInput = FindInputPortByName(WorldContextObject, DisplayName);
 	if (ExistingInput)
 	{
-		UE_LOG(LogLibremidi4UE, Verbose, TEXT("OpenInputPortByName: Port '%s' is already open, returning existing instance"), 
+		UE_LOG(LogLibremidi4UE, Log, TEXT("OpenInputPortByName: Port '%s' already open, returning existing instance"), 
 			*DisplayName);
 		return ExistingInput;
 	}
@@ -359,8 +358,7 @@ ULibremidiInput* ULibremidiUtilities::OpenInputPortByName(UObject* WorldContextO
 
 	if (!TargetPort)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("OpenInputPortByName: Port '%s' not found in available ports"), 
-			*DisplayName);
+		UE_LOG(LogLibremidi4UE, Error, TEXT("OpenInputPortByName: Port '%s' not found"), *DisplayName);
 		return nullptr;
 	}
 
@@ -378,7 +376,7 @@ ULibremidiInput* ULibremidiUtilities::OpenInputPortByName(UObject* WorldContextO
 		return nullptr;
 	}
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("OpenInputPortByName: Opened input port '%s'"), *DisplayName);
+	UE_LOG(LogLibremidi4UE, Log, TEXT("OpenInputPortByName: Opened port '%s'"), *DisplayName);
 	return Input;
 }
 
@@ -386,23 +384,22 @@ ULibremidiOutput* ULibremidiUtilities::OpenOutputPortByName(UObject* WorldContex
 {
 	if (!WorldContextObject)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("OpenOutputPortByName: Invalid WorldContextObject"));
+		UE_LOG(LogLibremidi4UE, Error, TEXT("OpenOutputPortByName: Invalid WorldContextObject"));
 		return nullptr;
 	}
 
 	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
 	if (!Subsystem)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("OpenOutputPortByName: Failed to get LibremidiEngineSubsystem"));
+		UE_LOG(LogLibremidi4UE, Error, TEXT("OpenOutputPortByName: Failed to get LibremidiEngineSubsystem"));
 		return nullptr;
 	}
 
-	// First, check if this port is already open
-	// If so, return the existing instance instead of creating a new one
+	// Check if port is already open
 	ULibremidiOutput* ExistingOutput = FindOutputPortByName(WorldContextObject, DisplayName);
 	if (ExistingOutput)
 	{
-		UE_LOG(LogLibremidi4UE, Verbose, TEXT("OpenOutputPortByName: Port '%s' is already open, returning existing instance"), 
+		UE_LOG(LogLibremidi4UE, Log, TEXT("OpenOutputPortByName: Port '%s' already open, returning existing instance"), 
 			*DisplayName);
 		return ExistingOutput;
 	}
@@ -420,8 +417,7 @@ ULibremidiOutput* ULibremidiUtilities::OpenOutputPortByName(UObject* WorldContex
 
 	if (!TargetPort)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("OpenOutputPortByName: Port '%s' not found in available ports"), 
-			*DisplayName);
+		UE_LOG(LogLibremidi4UE, Error, TEXT("OpenOutputPortByName: Port '%s' not found"), *DisplayName);
 		return nullptr;
 	}
 
@@ -439,6 +435,28 @@ ULibremidiOutput* ULibremidiUtilities::OpenOutputPortByName(UObject* WorldContex
 		return nullptr;
 	}
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("OpenOutputPortByName: Opened output port '%s'"), *DisplayName);
+	UE_LOG(LogLibremidi4UE, Log, TEXT("OpenOutputPortByName: Opened port '%s'"), *DisplayName);
 	return Output;
+}
+
+// ============================================================================
+// Debug Utilities
+// ============================================================================
+
+void ULibremidiUtilities::LogAvailableMidiDevices(UObject* WorldContextObject)
+{
+	if (!WorldContextObject)
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("LogAvailableMidiDevices: Invalid WorldContextObject"));
+		return;
+	}
+
+	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
+	if (!Subsystem)
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("LogAvailableMidiDevices: Failed to get LibremidiEngineSubsystem"));
+		return;
+	}
+
+	Subsystem->LogAvailableDevices();
 }

@@ -119,11 +119,13 @@ ULibremidiOutput* ULibremidiOutput::CreateMidiOutput(UObject* WorldContextObject
 {
 	if (!WorldContextObject)
 	{
-		UE_LOG(LogLibremidi4UE, Error, TEXT("CreateMidiOutput: Invalid WorldContextObject"));
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] CreateMidiOutput failed: Invalid WorldContextObject"));
 		return nullptr;
 	}
 
-	return NewObject<ULibremidiOutput>(WorldContextObject);
+	ULibremidiOutput* NewOutput = NewObject<ULibremidiOutput>(WorldContextObject);
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Created new MidiOutput instance"));
+	return NewOutput;
 }
 
 ULibremidiEngineSubsystem* ULibremidiOutput::GetSubsystem() const
@@ -149,12 +151,17 @@ bool ULibremidiOutput::CreateMidiOut(libremidi::API API)
 		if (MidiOut)
 		{
 			UE::MIDI::Private::LogBackendType(MidiOut->get_current_api(), false);
+			return true;
 		}
-		
-		return true;
+		else
+		{
+			UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] Failed to create midi_out instance"));
+			return false;
+		}
 	}
 	catch (const std::exception& e)
 	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] Exception creating midi_out: %s"), UTF8_TO_TCHAR(e.what()));
 		HandleError(FString::Printf(TEXT("Failed to create MIDI output: %s"), UTF8_TO_TCHAR(e.what())));
 		return false;
 	}
@@ -162,9 +169,12 @@ bool ULibremidiOutput::CreateMidiOut(libremidi::API API)
 
 bool ULibremidiOutput::OpenPort(const FLibremidiPortInfo& PortInfo, const FString& ClientName)
 {
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Opening port '%s'..."), *PortInfo.DisplayName);
+	
 	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
 	if (!Subsystem)
 	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] Failed to get LibremidiEngineSubsystem"));
 		HandleError(TEXT("Failed to get LibremidiEngineSubsystem"));
 		return false;
 	}
@@ -172,38 +182,34 @@ bool ULibremidiOutput::OpenPort(const FLibremidiPortInfo& PortInfo, const FStrin
 	// Check if this instance already has a port open
 	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
 	{
-		// Check if it's the SAME port we're trying to open
 		if (CurrentPortInfo == PortInfo)
 		{
-			UE_LOG(LogLibremidi4UE, Verbose, TEXT("MidiOutput: Port '%s' is already open by this instance"), 
-				*PortInfo.DisplayName);
+			UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Port '%s' is already open"), *PortInfo.DisplayName);
 			return true;
 		}
 		
-		// Different port - error
 		const FString ErrorMsg = FString::Printf(
-			TEXT("This instance already has port '%s' open. Close it before opening '%s'"),
+			TEXT("Close port '%s' before opening '%s'"),
 			*CurrentPortInfo.DisplayName,
 			*PortInfo.DisplayName
 		);
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: %s"), *ErrorMsg);
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] %s"), *ErrorMsg);
 		HandleError(ErrorMsg);
 		return false;
 	}
 
-	// Check if this port is already open by another instance
+	// Check if port is already open by another instance
 	if (Subsystem->FindActiveOutputPort(PortInfo))
 	{
-		const FString ErrorMsg = FString::Printf(
-			TEXT("Port '%s' is already open by another instance"),
-			*PortInfo.DisplayName
-		);
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: %s"), *ErrorMsg);
+		const FString ErrorMsg = FString::Printf(TEXT("Port '%s' is already in use"), *PortInfo.DisplayName);
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] %s"), *ErrorMsg);
 		HandleError(ErrorMsg);
 		return false;
 	}
 
 	const ELibremidiAPI API = Subsystem->GetCurrentAPI();
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MidiOutput] Using API: %s"), *UEnum::GetValueAsString(API));
+	
 	if (!CreateMidiOut(LibremidiTypeConversion::ToLibremidiAPI(API)))
 	{
 		return false;
@@ -212,23 +218,27 @@ bool ULibremidiOutput::OpenPort(const FLibremidiPortInfo& PortInfo, const FStrin
 	if (const auto Error = MidiOut->open_port(ConvertPortInfo(PortInfo), TCHAR_TO_UTF8(*ClientName)); 
 		Error != stdx::error{})
 	{
-		HandleError(FString::Printf(TEXT("Failed to open port '%s'"), *PortInfo.DisplayName));
 		MidiOut.Reset();
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] Failed to open port '%s'"), *PortInfo.DisplayName);
+		HandleError(FString::Printf(TEXT("Failed to open port '%s'"), *PortInfo.DisplayName));
 		return false;
 	}
 
 	LastClientName = ClientName;
 	NotifyPortOpened(PortInfo, false);
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened port '%s' with API: %s (UMP processing)"), 
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Opened port '%s' (API: %s)"), 
 		*PortInfo.DisplayName, *UEnum::GetValueAsString(API));
 	return true;
 }
 
 bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 {
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Opening virtual port '%s'..."), *PortName);
+	
 	if (UE::MIDI::Private::IsPortAlreadyOpen(MidiOut.Get(), TEXT("Output")))
 	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] A port is already open"));
 		HandleError(TEXT("Port is already open"));
 		return false;
 	}
@@ -236,6 +246,7 @@ bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 	ULibremidiEngineSubsystem* Subsystem = GetSubsystem();
 	if (!Subsystem)
 	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] Failed to get LibremidiEngineSubsystem"));
 		HandleError(TEXT("Failed to get LibremidiEngineSubsystem"));
 		return false;
 	}
@@ -249,8 +260,9 @@ bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 	if (const auto Error = MidiOut->open_virtual_port(TCHAR_TO_UTF8(*PortName)); 
 		Error != stdx::error{})
 	{
-		HandleError(FString::Printf(TEXT("Failed to open virtual port '%s'"), *PortName));
 		MidiOut.Reset();
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] Failed to open virtual port '%s'"), *PortName);
+		HandleError(FString::Printf(TEXT("Failed to open virtual port '%s'"), *PortName));
 		return false;
 	}
 
@@ -261,7 +273,7 @@ bool ULibremidiOutput::OpenVirtualPort(const FString& PortName)
 	LastClientName = PortName;
 	NotifyPortOpened(VirtualPortInfo, true);
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Opened virtual port '%s' with API: %s (UMP processing)"), 
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Opened virtual port '%s' (API: %s)"), 
 		*PortName, *UEnum::GetValueAsString(API));
 	return true;
 }
@@ -270,8 +282,12 @@ bool ULibremidiOutput::ClosePort()
 {
 	if (!MidiOut || !MidiOut->is_port_open())
 	{
+		UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MidiOutput] No port to close"));
 		return false;
 	}
+
+	const FString PortName = CurrentPortInfo.DisplayName;
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Closing port '%s'..."), *PortName);
 
 	// Store port info before closing (for potential reconnection)
 	if (!IsPortConnected() && bEnableAutoReconnect)
@@ -281,13 +297,15 @@ bool ULibremidiOutput::ClosePort()
 
 	if (const auto Error = MidiOut->close_port(); Error != stdx::error{})
 	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("[MidiOutput] Failed to close port"));
 		HandleError(TEXT("Failed to close port"));
 		return false;
 	}
 
 	NotifyPortClosed();
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Port closed"));
 	MidiOut.Reset();
+	
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Closed port '%s'"), *PortName);
 	return true;
 }
 
@@ -370,7 +388,7 @@ bool ULibremidiOutput::SendMessageUMP(const TArray<uint32>& Data)
 	FString DataStr;
 	DataStr.Reserve(Data.Num() * 9);
 	
-	for (int32 i = 0; i < Data.Num(); ++i)
+for (int32 i = 0; i < Data.Num(); ++i)
 	{
 		DataStr += FString::Printf(TEXT("%08X "), Data[i]);
 	}
@@ -507,7 +525,7 @@ void ULibremidiOutput::HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedP
 		return;
 	}
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Attempting auto-reconnection to '%s'"), 
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Auto-reconnecting to '%s'..."), 
 		*ReconnectedPort.DisplayName);
 
 	if (IsPortOpen())
@@ -517,11 +535,11 @@ void ULibremidiOutput::HandleHotPlugEvent(const FLibremidiPortInfo& ReconnectedP
 
 	if (OpenPort(ReconnectedPort, LastClientName))
 	{
-		UE_LOG(LogLibremidi4UE, Log, TEXT("MidiOutput: Auto-reconnection successful"));
+		UE_LOG(LogLibremidi4UE, Log, TEXT("[MidiOutput] Auto-reconnect successful"));
 	}
 	else
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("MidiOutput: Auto-reconnection failed"));
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("[MidiOutput] Auto-reconnect failed"));
 	}
 }
 
@@ -541,8 +559,8 @@ bool ULibremidiOutput::SendNoteOn(int32 Channel, int32 Note, float Velocity)
 	Note = FLibremidiUtils::ClampNote(Note);
 	const uint16 Vel16 = FloatToVelocity16(Velocity);
 
-	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d NoteOn Note:%d Vel:%.3f (Raw16:%d)"), 
-		Channel, Note, Velocity, Vel16);
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MIDI OUT] NoteOn  Ch:%2d Note:%3d Vel:%.3f"), 
+		Channel, Note, Velocity);
 
 	uint32 UMPData[2];
 	BuildUMPMessage(UMPData, 0x9, Channel, Note, Vel16 << 16);
@@ -567,8 +585,8 @@ bool ULibremidiOutput::SendNoteOff(int32 Channel, int32 Note, float Velocity)
 	Note = FLibremidiUtils::ClampNote(Note);
 	const uint16 Vel16 = FloatToVelocity16(Velocity);
 
-	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d NoteOff Note:%d Vel:%.3f (Raw16:%d)"), 
-		Channel, Note, Velocity, Vel16);
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MIDI OUT] NoteOff Ch:%2d Note:%3d Vel:%.3f"), 
+		Channel, Note, Velocity);
 
 	uint32 UMPData[2];
 	BuildUMPMessage(UMPData, 0x8, Channel, Note, Vel16 << 16);
@@ -593,8 +611,8 @@ bool ULibremidiOutput::SendControlChange(int32 Channel, int32 Controller, float 
 	Controller = FLibremidiUtils::ClampController(Controller);
 	const uint32 Val32 = FloatToValue32(Value);
 
-	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d CC:%d Val:%.3f (Raw32:%u)"), 
-		Channel, Controller, Value, Val32);
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MIDI OUT] CC      Ch:%2d CC:%3d Val:%.3f"), 
+		Channel, Controller, Value);
 
 	uint32 UMPData[2];
 	BuildUMPMessage(UMPData, 0xB, Channel, Controller, Val32);
@@ -618,7 +636,7 @@ bool ULibremidiOutput::SendProgramChange(int32 Channel, int32 Program)
 	Channel = FLibremidiUtils::ClampChannel(Channel);
 	Program = FLibremidiUtils::ClampProgram(Program);
 
-	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d ProgramChange Prog:%d"), 
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MIDI OUT] Program Ch:%2d Prog:%d"), 
 		Channel, Program);
 
 	uint32 UMPData[2];
@@ -643,8 +661,8 @@ bool ULibremidiOutput::SendPitchBend(int32 Channel, float Value)
 	Channel = FLibremidiUtils::ClampChannel(Channel);
 	const uint32 Bend32 = static_cast<uint32>(FloatToPitchBend32(Value));
 
-	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d PitchBend Val:%.3f (Raw32:%u)"), 
-		Channel, Value, Bend32);
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MIDI OUT] Pitch   Ch:%2d Val:%.3f"), 
+		Channel, Value);
 
 	uint32 UMPData[2];
 	BuildUMPMessage(UMPData, 0xE, Channel, 0, Bend32);
@@ -668,8 +686,8 @@ bool ULibremidiOutput::SendChannelPressure(int32 Channel, float Pressure)
 	Channel = FLibremidiUtils::ClampChannel(Channel);
 	const uint32 Press32 = FloatToValue32(Pressure);
 
-	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d ChannelPressure Press:%.3f (Raw32:%u)"), 
-		Channel, Pressure, Press32);
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MIDI OUT] ChanAT  Ch:%2d Press:%.3f"), 
+		Channel, Pressure);
 
 	uint32 UMPData[2];
 	BuildUMPMessage(UMPData, 0xD, Channel, 0, Press32);
@@ -694,8 +712,8 @@ bool ULibremidiOutput::SendPolyPressure(int32 Channel, int32 Note, float Pressur
 	Note = FLibremidiUtils::ClampNote(Note);
 	const uint32 Press32 = FloatToValue32(Pressure);
 
-	UE_LOG(LogLibremidi4UE, VeryVerbose, TEXT("[MIDI OUT] Ch:%d PolyPressure Note:%d Press:%.3f (Raw32:%u)"), 
-		Channel, Note, Pressure, Press32);
+	UE_LOG(LogLibremidi4UE, Verbose, TEXT("[MIDI OUT] PolyAT  Ch:%2d Note:%3d Press:%.3f"), 
+		Channel, Note, Pressure);
 
 	uint32 UMPData[2];
 	BuildUMPMessage(UMPData, 0xA, Channel, Note, Press32);
@@ -710,16 +728,19 @@ bool ULibremidiOutput::SendPolyPressure(int32 Channel, int32 Note, float Pressur
 
 bool ULibremidiOutput::SendAllNotesOff(int32 Channel)
 {
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MIDI OUT] AllNotesOff Ch:%d"), Channel);
 	return SendControlChange(Channel, 123, 0.0f);
 }
 
 bool ULibremidiOutput::SendAllSoundOff(int32 Channel)
 {
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MIDI OUT] AllSoundOff Ch:%d"), Channel);
 	return SendControlChange(Channel, 120, 0.0f);
 }
 
 bool ULibremidiOutput::SendResetAllControllers(int32 Channel)
 {
+	UE_LOG(LogLibremidi4UE, Log, TEXT("[MIDI OUT] ResetAllControllers Ch:%d"), Channel);
 	return SendControlChange(Channel, 121, 0.0f);
 }
 

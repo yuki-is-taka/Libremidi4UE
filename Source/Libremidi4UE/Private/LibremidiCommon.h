@@ -36,6 +36,30 @@ namespace UE::MIDI::Private
 	}
 
 	/**
+	 * Helper to set device identifier from FLibremidiPortInfo to libremidi port
+	 * This is critical for Windows MIDI Services backend which requires the device field
+	 */
+	inline void SetDeviceIdentifier(libremidi::port_information& Port, const FLibremidiPortInfo& PortInfo)
+	{
+		switch (PortInfo.DeviceType)
+		{
+			case ELibremidiDeviceType::String:
+				if (!PortInfo.DeviceString.IsEmpty())
+				{
+					Port.device = std::string(TCHAR_TO_UTF8(*PortInfo.DeviceString));
+				}
+				break;
+			case ELibremidiDeviceType::Integer:
+				Port.device = static_cast<uint64_t>(PortInfo.DeviceInteger);
+				break;
+			case ELibremidiDeviceType::None:
+			default:
+				// Leave as monostate
+				break;
+		}
+	}
+
+	/**
 	 * Convert FMidiPortInfo to libremidi::input_port
 	 * @param PortInfo UE port information structure
 	 * @return libremidi input port structure
@@ -45,10 +69,16 @@ namespace UE::MIDI::Private
 		libremidi::input_port Port;
 		Port.client = static_cast<std::uintptr_t>(PortInfo.ClientHandle);
 		Port.port = static_cast<uint32_t>(PortInfo.PortHandle);
-		Port.display_name = TCHAR_TO_UTF8(*PortInfo.DisplayName);
-		Port.port_name = TCHAR_TO_UTF8(*PortInfo.PortName);
-		Port.device_name = TCHAR_TO_UTF8(*PortInfo.DeviceName);
-		Port.manufacturer = TCHAR_TO_UTF8(*PortInfo.Manufacturer);
+		
+		// Convert to std::string to ensure proper lifetime
+		Port.display_name = std::string(TCHAR_TO_UTF8(*PortInfo.DisplayName));
+		Port.port_name = std::string(TCHAR_TO_UTF8(*PortInfo.PortName));
+		Port.device_name = std::string(TCHAR_TO_UTF8(*PortInfo.DeviceName));
+		Port.manufacturer = std::string(TCHAR_TO_UTF8(*PortInfo.Manufacturer));
+		
+		// Set device identifier - required by Windows MIDI Services backend
+		SetDeviceIdentifier(Port, PortInfo);
+		
 		return Port;
 	}
 
@@ -62,10 +92,16 @@ namespace UE::MIDI::Private
 		libremidi::output_port Port;
 		Port.client = static_cast<std::uintptr_t>(PortInfo.ClientHandle);
 		Port.port = static_cast<uint32_t>(PortInfo.PortHandle);
-		Port.display_name = TCHAR_TO_UTF8(*PortInfo.DisplayName);
-		Port.port_name = TCHAR_TO_UTF8(*PortInfo.PortName);
-		Port.device_name = TCHAR_TO_UTF8(*PortInfo.DeviceName);
-		Port.manufacturer = TCHAR_TO_UTF8(*PortInfo.Manufacturer);
+		
+		// Convert to std::string to ensure proper lifetime
+		Port.display_name = std::string(TCHAR_TO_UTF8(*PortInfo.DisplayName));
+		Port.port_name = std::string(TCHAR_TO_UTF8(*PortInfo.PortName));
+		Port.device_name = std::string(TCHAR_TO_UTF8(*PortInfo.DeviceName));
+		Port.manufacturer = std::string(TCHAR_TO_UTF8(*PortInfo.Manufacturer));
+		
+		// Set device identifier - required by Windows MIDI Services backend
+		SetDeviceIdentifier(Port, PortInfo);
+		
 		return Port;
 	}
 
