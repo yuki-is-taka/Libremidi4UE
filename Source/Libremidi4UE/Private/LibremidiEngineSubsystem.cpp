@@ -1,521 +1,307 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
 #include "LibremidiEngineSubsystem.h"
-#include "LibremidiInput.h"
-#include "LibremidiOutput.h"
-#include "LibremidiSettings.h"
 #include "Libremidi4UELog.h"
-
-namespace
-{
-	FString PortTypeToString(libremidi::port_information::port_type type)
-	{
-		using pt = libremidi::port_information::port_type;
-		TArray<FString> types;
-
-		if (type == pt::unknown) return TEXT("Unknown");
-		if (type & pt::software) types.Add(TEXT("Software"));
-		if (type & pt::loopback) types.Add(TEXT("Loopback"));
-		if (type & pt::hardware) types.Add(TEXT("Hardware"));
-		if (type & pt::usb) types.Add(TEXT("USB"));
-		if (type & pt::bluetooth) types.Add(TEXT("Bluetooth"));
-		if (type & pt::pci) types.Add(TEXT("PCI"));
-		if (type & pt::network) types.Add(TEXT("Network"));
-
-		return types.Num() > 0 ? FString::Join(types, TEXT(" | ")) : TEXT("None");
-	}
-
-	void LogDetailedPortInformation(const FString& EventType, const libremidi::port_information& port, bool bIsInput)
-	{
-		UE_LOG(LogLibremidi4UE, Log, TEXT("=== %s: %s Port ==="), *EventType, bIsInput ? TEXT("Input") : TEXT("Output"));
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  Display Name: %s"), UTF8_TO_TCHAR(port.display_name.c_str()));
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  Port Name: %s"), UTF8_TO_TCHAR(port.port_name.c_str()));
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  Device Name: %s"), 
-			port.device_name.empty() ? TEXT("<empty>") : UTF8_TO_TCHAR(port.device_name.c_str()));
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  Manufacturer: %s"), 
-			port.manufacturer.empty() ? TEXT("<empty>") : UTF8_TO_TCHAR(port.manufacturer.c_str()));
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  Client Handle: 0x%llX"), port.client);
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  Port Handle: 0x%llX"), port.port);
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  Port Type: %s"), *PortTypeToString(port.type));
-		UE_LOG(LogLibremidi4UE, Log, TEXT("========================================"));
-	}
-}
+#include "LibremidiSettings.h"
 
 void ULibremidiEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem Initialize start."));
 
-	const ULibremidiSettings* Settings = GetDefault<ULibremidiSettings>();
-	if (Settings)
+	ULibremidiSettings* Settings = GetMutableDefault<ULibremidiSettings>();
+	if (!Settings)
 	{
-		MidiAPI = Settings->GetBackendAPI();  // ? Getter???Enum???
-		bTrackHardware = Settings->bTrackHardware;
-		bTrackVirtual = Settings->bTrackVirtual;
-		bTrackAny = Settings->bTrackAny;
+		return;
 	}
 
+#if WITH_EDITOR
+	SettingsChangedHandle = Settings->OnSettingChanged().AddUObject(
+		this, &ULibremidiEngineSubsystem::HandleSettingsChanged);
+#endif
+
 	StartObserver();
-
-	LogAvailableAPIs();
-	LogAvailableDevices();
-
-	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem initialized"));
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem Initialize complete."));
 }
 
 void ULibremidiEngineSubsystem::Deinitialize()
 {
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem Deinitialize start."));
+#if WITH_EDITOR
+	ULibremidiSettings* Settings = GetMutableDefault<ULibremidiSettings>();
+	if (Settings && SettingsChangedHandle.IsValid())
+	{
+		Settings->OnSettingChanged().Remove(SettingsChangedHandle);
+		SettingsChangedHandle.Reset();
+	}
+#endif
+
 	StopObserver();
-
-	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem deinitialized"));
-
 	Super::Deinitialize();
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem Deinitialize complete."));
 }
 
-void ULibremidiEngineSubsystem::SetMidiAPI(ELibremidiAPI API)
+TArray<FLibremidiInputInfo> ULibremidiEngineSubsystem::GetInputPorts() const
 {
-	if (MidiAPI != API)
+	TArray<FLibremidiInputInfo> Ports;
+	if (!Observer)
 	{
-		MidiAPI = API;
-		RestartObserver();
-		
-		FString APIName = UEnum::GetValueAsString(API);
-		UE_LOG(LogLibremidi4UE, Log, TEXT("MIDI API set to %s"), *APIName);
+		return Ports;
 	}
+
+	std::vector<libremidi::input_port> InputPorts = Observer->get_input_ports();
+	Ports.Reserve(static_cast<int32>(InputPorts.size()));
+	for (libremidi::input_port& Port : InputPorts)
+	{
+		Ports.Emplace(MoveTemp(Port));
+	}
+
+	return Ports;
 }
 
-void ULibremidiEngineSubsystem::SetTrackHardware(bool bEnabled)
-{
-	if (bTrackHardware != bEnabled)
-	{
-		bTrackHardware = bEnabled;
-		RestartObserver();
-		UE_LOG(LogLibremidi4UE, Log, TEXT("Track Hardware set to %s"), bEnabled ? TEXT("true") : TEXT("false"));
-	}
-}
-
-void ULibremidiEngineSubsystem::SetTrackVirtual(bool bEnabled)
-{
-	if (bTrackVirtual != bEnabled)
-	{
-		bTrackVirtual = bEnabled;
-		RestartObserver();
-		UE_LOG(LogLibremidi4UE, Log, TEXT("Track Virtual set to %s"), bEnabled ? TEXT("true") : TEXT("false"));
-	}
-}
-
-void ULibremidiEngineSubsystem::SetTrackAny(bool bEnabled)
-{
-	if (bTrackAny != bEnabled)
-	{
-		bTrackAny = bEnabled;
-		RestartObserver();
-		UE_LOG(LogLibremidi4UE, Log, TEXT("Track Any set to %s"), bEnabled ? TEXT("true") : TEXT("false"));
-	}
-}
-
-ELibremidiAPI ULibremidiEngineSubsystem::GetCurrentAPI() const
+libremidi::API ULibremidiEngineSubsystem::GetObserverApi() const
 {
 	if (Observer)
 	{
-		return LibremidiTypeConversion::FromLibremidiAPI(Observer->get_current_api());
+		return Observer->get_current_api();
 	}
-	return ELibremidiAPI::Unspecified;
+
+	const ULibremidiSettings* Settings = GetDefault<ULibremidiSettings>();
+	if (Settings)
+	{
+		return Settings->GetResolvedBackendAPI();
+	}
+
+	return libremidi::API::UNSPECIFIED;
 }
 
-TArray<FLibremidiPortInfo> ULibremidiEngineSubsystem::GetAvailableInputPorts() const
+ULibremidiInput* ULibremidiEngineSubsystem::CreateInput(
+	ELibremidiMidiProtocol Protocol,
+	bool bInIgnoreSysex,
+	bool bInIgnoreTiming,
+	bool bInIgnoreSensing,
+	ELibremidiTimestampMode Mode,
+	bool bInMidi1ChannelEventsToMidi2)
 {
-	TArray<FLibremidiPortInfo> Result;
-	
-	if (Observer)
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem CreateInput start."));
+	ULibremidiInput* Input = ULibremidiInput::Create(
+		this,
+		Protocol,
+		bInIgnoreSysex,
+		bInIgnoreTiming,
+		bInIgnoreSensing,
+		Mode,
+		bInMidi1ChannelEventsToMidi2);
+	if (Input)
 	{
-		auto ports = Observer->get_input_ports();
-		for (const auto& port : ports)
-		{
-			Result.Add(FLibremidiPortInfo(port));
-		}
+		Inputs.Add(Input);
+		UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem CreateInput complete."));
 	}
-	
-	return Result;
+	else
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiEngineSubsystem CreateInput failed."));
+	}
+	return Input;
 }
 
-TArray<FLibremidiPortInfo> ULibremidiEngineSubsystem::GetAvailableOutputPorts() const
+void ULibremidiEngineSubsystem::DestroyInput(ULibremidiInput* Input)
 {
-	TArray<FLibremidiPortInfo> Result;
-	
-	if (Observer)
+	if (!Input)
 	{
-		auto ports = Observer->get_output_ports();
-		for (const auto& port : ports)
-		{
-			Result.Add(FLibremidiPortInfo(port));
-		}
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiEngineSubsystem DestroyInput skipped: null input."));
+		return;
 	}
-	
-	return Result;
+
+	Inputs.RemoveSingle(Input);
+	Input->MarkAsGarbage();
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem DestroyInput complete."));
+}
+
+ULibremidiOutput* ULibremidiEngineSubsystem::CreateOutput(
+	ELibremidiMidiProtocol Protocol,
+	ELibremidiTimestampMode Mode)
+{
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem CreateOutput start."));
+	ULibremidiOutput* Output = ULibremidiOutput::Create(this, Protocol, Mode);
+	if (Output)
+	{
+		Outputs.Add(Output);
+		UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem CreateOutput complete."));
+	}
+	else
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiEngineSubsystem CreateOutput failed."));
+	}
+	return Output;
+}
+
+void ULibremidiEngineSubsystem::DestroyOutput(ULibremidiOutput* Output)
+{
+	if (!Output)
+	{
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiEngineSubsystem DestroyOutput skipped: null output."));
+		return;
+	}
+
+	Outputs.RemoveSingle(Output);
+	Output->MarkAsGarbage();
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem DestroyOutput complete."));
+}
+
+TArray<FLibremidiOutputInfo> ULibremidiEngineSubsystem::GetOutputPorts() const
+{
+	TArray<FLibremidiOutputInfo> Ports;
+	if (!Observer)
+	{
+		return Ports;
+	}
+
+	std::vector<libremidi::output_port> OutputPorts = Observer->get_output_ports();
+	Ports.Reserve(static_cast<int32>(OutputPorts.size()));
+	for (libremidi::output_port& Port : OutputPorts)
+	{
+		Ports.Emplace(MoveTemp(Port));
+	}
+
+	return Ports;
 }
 
 void ULibremidiEngineSubsystem::StartObserver()
 {
-	if (Observer)
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem StartObserver start."));
+	const ULibremidiSettings* Settings = GetDefault<ULibremidiSettings>();
+	if (!Settings)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("Observer already exists. Stopping before starting new one."));
-		StopObserver();
+		UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiEngineSubsystem StartObserver failed: settings missing."));
+		return;
 	}
 
-	Observer = MakeUnique<libremidi::observer>(CreateObserverConfiguration(), CreateObserverAPIConfiguration());
-	
-	ELibremidiAPI CurrentAPI = GetCurrentAPI();
-	FString APIName = UEnum::GetValueAsString(CurrentAPI);
-	bool bIsMidi2 = libremidi::is_midi2(LibremidiTypeConversion::ToLibremidiAPI(CurrentAPI));
-	
-	UE_LOG(LogLibremidi4UE, Log, TEXT("MIDI Observer started"));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  API: %s"), *APIName);
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  MIDI 2.0 Support: %s"), bIsMidi2 ? TEXT("YES") : TEXT("NO"));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  Track Hardware: %s"), bTrackHardware ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  Track Virtual: %s"), bTrackVirtual ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  Track Any: %s"), bTrackAny ? TEXT("true") : TEXT("false"));
+	libremidi::observer_configuration Config;
+	Config.track_hardware = Settings->bTrackHardware;
+	Config.track_virtual = Settings->bTrackVirtual;
+	Config.track_any = Settings->bTrackAny;
+	Config.input_added = [this](const libremidi::input_port& Port)
+	{
+		HandleInputPortAdded(Port);
+	};
+	Config.input_removed = [this](const libremidi::input_port& Port)
+	{
+		HandleInputPortRemoved(Port);
+	};
+	Config.output_added = [this](const libremidi::output_port& Port)
+	{
+		HandleOutputPortAdded(Port);
+	};
+	Config.output_removed = [this](const libremidi::output_port& Port)
+	{
+		HandleOutputPortRemoved(Port);
+	};
+
+	const libremidi::API Api = Settings->GetResolvedBackendAPI();
+	libremidi::observer_api_configuration ApiConfig = libremidi::observer_configuration_for(Api);
+	Observer = MakeUnique<libremidi::observer>(Config, ApiConfig);
+
+	LogObserverInfo();
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem StartObserver complete."));
 }
 
 void ULibremidiEngineSubsystem::StopObserver()
 {
-	if (Observer)
-	{
-		Observer.Reset();
-		UE_LOG(LogLibremidi4UE, Log, TEXT("MIDI Observer stopped"));
-	}
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem StopObserver start."));
+	Observer.Reset();
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem StopObserver complete."));
 }
 
-void ULibremidiEngineSubsystem::RestartObserver()
-{
-	UE_LOG(LogLibremidi4UE, Log, TEXT("Restarting MIDI Observer with new configuration..."));
-	StopObserver();
-	StartObserver();
-	LogAvailableDevices();
-}
-
-void ULibremidiEngineSubsystem::LogAvailableAPIs() const
-{
-	UE_LOG(LogLibremidi4UE, Log, TEXT("=== Available MIDI 1.0 APIs ==="));
-	for (auto api : libremidi::available_apis())
-	{
-		FString apiName = UTF8_TO_TCHAR(libremidi::get_api_display_name(api).data());
-		UE_LOG(LogLibremidi4UE, Log, TEXT("  - %s"), *apiName);
-	}
-
-	UE_LOG(LogLibremidi4UE, Log, TEXT("=== Available MIDI 2.0 (UMP) APIs ==="));
-	const auto umpApis = libremidi::available_ump_apis();
-	if (umpApis.empty())
-	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("  No MIDI 2.0 APIs available"));
-	}
-	else
-	{
-		for (auto api : umpApis)
-		{
-			FString apiName = UTF8_TO_TCHAR(libremidi::get_api_display_name(api).data());
-			UE_LOG(LogLibremidi4UE, Log, TEXT("  - %s"), *apiName);
-		}
-	}
-}
-
-void ULibremidiEngineSubsystem::LogAvailableDevices()
+void ULibremidiEngineSubsystem::LogObserverInfo() const
 {
 	if (!Observer)
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("Observer is not initialized. Cannot log devices."));
 		return;
 	}
 
-	std::vector<libremidi::input_port> input_ports = Observer->get_input_ports();
-	UE_LOG(LogLibremidi4UE, Log, TEXT("=============================================="));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  Available MIDI Devices"));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  (Connected to system, not necessarily open)"));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("=============================================="));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("Found %d MIDI input port(s)"), input_ports.size());
-	
-	for (const libremidi::input_port& port : input_ports)
-	{
-		LogDetailedPortInformation(TEXT("AVAILABLE INPUT DEVICE"), port, true);
-	}
-	
-	std::vector<libremidi::output_port> output_ports = Observer->get_output_ports();
-	UE_LOG(LogLibremidi4UE, Log, TEXT("Found %d MIDI output port(s)"), output_ports.size());
-	
-	for (const libremidi::output_port& port : output_ports)
-	{
-		LogDetailedPortInformation(TEXT("AVAILABLE OUTPUT DEVICE"), port, false);
-	}
+	const libremidi::API CurrentApi = Observer->get_current_api();
+	const std::string_view ApiName = libremidi::get_api_display_name(CurrentApi);
+	const std::vector<libremidi::input_port> InputPorts = Observer->get_input_ports();
+	const std::vector<libremidi::output_port> OutputPorts = Observer->get_output_ports();
+	const int32 InputCount = static_cast<int32>(InputPorts.size());
+	const int32 OutputCount = static_cast<int32>(OutputPorts.size());
+
+	UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE observer started: API=%s Inputs=%d Outputs=%d"),
+		UTF8_TO_TCHAR(ApiName.data()), InputCount, OutputCount);
 }
 
-libremidi::observer_configuration ULibremidiEngineSubsystem::CreateObserverConfiguration() const
+#if WITH_EDITOR
+void ULibremidiEngineSubsystem::HandleSettingsChanged(UObject* SettingsObject, FPropertyChangedEvent& PropertyChangedEvent)
 {
-	libremidi::observer_configuration config;
-
-	config.on_error = [this](std::string_view errorText, const libremidi::source_location& loc)
+	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem HandleSettingsChanged."));
+	const ULibremidiSettings* Settings = GetDefault<ULibremidiSettings>();
+	if (!Settings)
 	{
-		HandleError(errorText, loc);
-	};
-
-	config.on_warning = [this](std::string_view warningText, const libremidi::source_location& loc)
-	{
-		HandleWarning(warningText, loc);
-	};
-
-	config.input_added = [this](const libremidi::input_port& port)
-	{
-		HandleInputDeviceAdded(port);
-	};
-
-	config.input_removed = [this](const libremidi::input_port& port)
-	{
-		HandleInputDeviceRemoved(port);
-	};
-
-	config.output_added = [this](const libremidi::output_port& port)
-	{
-		HandleOutputDeviceAdded(port);
-	};
-
-	config.output_removed = [this](const libremidi::output_port& port)
-	{
-		HandleOutputDeviceRemoved(port);
-	};
-
-	config.track_hardware = bTrackHardware;
-	config.track_virtual = bTrackVirtual;
-	config.track_any = bTrackAny;
-	config.notify_in_constructor = true;
-
-	return config;
-}
-
-libremidi::observer_api_configuration ULibremidiEngineSubsystem::CreateObserverAPIConfiguration() const
-{
-	// Get the preferred API (respects manual selection or auto-selects with UMP priority)
-	ELibremidiAPI PreferredAPI = ULibremidiSettings::GetPreferredAPI(MidiAPI);
-	
-	// Log the selection strategy
-	if (MidiAPI == ELibremidiAPI::Unspecified)
-	{
-		UE_LOG(LogLibremidi4UE, Log, TEXT("API Selection: Auto (Unspecified) - Preferring MIDI 2.0 UMP APIs"));
-	}
-	else
-	{
-		FString APIName = UEnum::GetValueAsString(MidiAPI);
-		UE_LOG(LogLibremidi4UE, Log, TEXT("API Selection: Manual (%s)"), *APIName);
-	}
-	
-	return LibremidiTypeConversion::ToLibremidiAPI(PreferredAPI);
-}
-
-void ULibremidiEngineSubsystem::HandleError(std::string_view ErrorText, const libremidi::source_location& Location) const
-{
-	FString ErrorMessage = UTF8_TO_TCHAR(ErrorText.data());
-	FString FileName = UTF8_TO_TCHAR(Location.file_name());
-	int32 LineNumber = Location.line();
-
-	UE_LOG(LogLibremidi4UE, Error, TEXT("MIDI Error at %s:%d - %s"), *FileName, LineNumber, *ErrorMessage);
-
-	AsyncTask(ENamedThreads::GameThread, [this, ErrorMessage, FileName, LineNumber]()
-	{
-		if (IsValid(this))
-		{
-			this->OnError.Broadcast(ErrorMessage, FileName, LineNumber);
-		}
-	});
-}
-
-void ULibremidiEngineSubsystem::HandleWarning(std::string_view WarningText, const libremidi::source_location& Location) const
-{
-	FString WarningMessage = UTF8_TO_TCHAR(WarningText.data());
-	FString FileName = UTF8_TO_TCHAR(Location.file_name());
-	int32 LineNumber = Location.line();
-
-	UE_LOG(LogLibremidi4UE, Warning, TEXT("MIDI Warning at %s:%d - %s"), *FileName, LineNumber, *WarningMessage);
-
-	AsyncTask(ENamedThreads::GameThread, [this, WarningMessage, FileName, LineNumber]()
-	{
-		if (IsValid(this))
-		{
-			this->OnWarning.Broadcast(WarningMessage, FileName, LineNumber);
-		}
-	});
-}
-
-void ULibremidiEngineSubsystem::HandleInputDeviceAdded(const libremidi::input_port& Port) const
-{
-	FLibremidiPortInfo PortInfo(Port);
-	
-	// Log detailed info on hot-plug events
-	LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, true);
-	
-	// Fire hot-plug delegate for auto-reconnection
-	OnInputPortConnected.Broadcast(PortInfo);
-
-	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
-	{
-		if (IsValid(this))
-		{
-			this->OnInputDeviceAdded.Broadcast(PortInfo);
-		}
-	});
-}
-
-void ULibremidiEngineSubsystem::HandleInputDeviceRemoved(const libremidi::input_port& Port) const
-{
-	FLibremidiPortInfo PortInfo(Port);
-	
-	UE_LOG(LogLibremidi4UE, Log, TEXT("=== DEVICE DISCONNECTED: Input Port ==="));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  Display Name: %s"), *PortInfo.DisplayName);
-	UE_LOG(LogLibremidi4UE, Log, TEXT("========================================"));
-
-	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
-	{
-		if (IsValid(this))
-		{
-			this->OnInputDeviceRemoved.Broadcast(PortInfo);
-		}
-	});
-}
-
-void ULibremidiEngineSubsystem::HandleOutputDeviceAdded(const libremidi::output_port& Port) const
-{
-	FLibremidiPortInfo PortInfo(Port);
-	
-	// Log detailed info on hot-plug events
-	LogDetailedPortInformation(TEXT("DEVICE CONNECTED"), Port, false);
-	
-	// Fire hot-plug delegate for auto-reconnection
-	OnOutputPortReconnected.Broadcast(PortInfo);
-
-	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
-	{
-		if (IsValid(this))
-		{
-			this->OnOutputDeviceAdded.Broadcast(PortInfo);
-		}
-	});
-}
-
-void ULibremidiEngineSubsystem::HandleOutputDeviceRemoved(const libremidi::output_port& Port) const
-{
-	FLibremidiPortInfo PortInfo(Port);
-	
-	UE_LOG(LogLibremidi4UE, Log, TEXT("=== DEVICE DISCONNECTED: Output Port ==="));
-	UE_LOG(LogLibremidi4UE, Log, TEXT("  Display Name: %s"), *PortInfo.DisplayName);
-	UE_LOG(LogLibremidi4UE, Log, TEXT("========================================"));
-
-	AsyncTask(ENamedThreads::GameThread, [this, PortInfo]()
-	{
-		if (IsValid(this))
-		{
-			this->OnOutputDeviceRemoved.Broadcast(PortInfo);
-		}
-	});
-}
-
-// ============================================================================
-// Port Management
-// ============================================================================
-
-TArray<ULibremidiInput*> ULibremidiEngineSubsystem::GetActiveInputPorts() const
-{
-	TArray<ULibremidiInput*> Result;
-	for (ULibremidiInput* Port : ActiveInputPorts)
-	{
-		if (Port && Port->IsPortOpen())
-		{
-			Result.Add(Port);
-		}
-	}
-	return Result;
-}
-
-TArray<ULibremidiOutput*> ULibremidiEngineSubsystem::GetActiveOutputPorts() const
-{
-	TArray<ULibremidiOutput*> Result;
-	for (ULibremidiOutput* Port : ActiveOutputPorts)
-	{
-		if (Port && Port->IsPortOpen())
-		{
-			Result.Add(Port);
-		}
-	}
-	return Result;
-}
-
-ULibremidiInput* ULibremidiEngineSubsystem::FindActiveInputPort(const FLibremidiPortInfo& PortInfo) const
-{
-	if (!PortInfo.IsValid())
-	{
-		return nullptr;
+		return;
 	}
 
-	for (ULibremidiInput* Port : ActiveInputPorts)
+	const FProperty* ChangedProperty = PropertyChangedEvent.Property;
+	if (!ChangedProperty)
 	{
-		if (Port && Port->IsPortOpen())
-		{
-			const FLibremidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
-			if (CurrentInfo == PortInfo)
-			{
-				return Port;
-			}
-		}
+		return;
 	}
-	return nullptr;
+
+	const FName PropertyName = ChangedProperty->GetFName();
+	const FName BackendProtocolName(TEXT("BackendProtocol"));
+	const FName BackendApiName(TEXT("BackendAPIName"));
+	const bool bBackendProperty = PropertyName == BackendProtocolName || PropertyName == BackendApiName;
+	if (!bBackendProperty)
+	{
+		return;
+	}
+
+	if (!Observer)
+	{
+		StartObserver();
+		OnObserverRestarted.Broadcast();
+		OnObserverRestartedNative.Broadcast();
+		return;
+	}
+
+	const libremidi::API DesiredApi = Settings->GetResolvedBackendAPI();
+	const libremidi::API CurrentApi = Observer->get_current_api();
+	const bool bApiChanged = DesiredApi != CurrentApi;
+	if (!bApiChanged)
+	{
+		return;
+	}
+
+	StopObserver();
+	StartObserver();
+	OnObserverRestarted.Broadcast();
+	OnObserverRestartedNative.Broadcast();
+}
+#endif // WITH_EDITOR
+
+void ULibremidiEngineSubsystem::HandleInputPortAdded(const libremidi::input_port& Port)
+{
+	FLibremidiInputInfo PortInfo(Port);
+	OnInputPortAdded.Broadcast(PortInfo);
+	OnInputPortAddedNative.Broadcast(PortInfo);
 }
 
-ULibremidiOutput* ULibremidiEngineSubsystem::FindActiveOutputPort(const FLibremidiPortInfo& PortInfo) const
+void ULibremidiEngineSubsystem::HandleInputPortRemoved(const libremidi::input_port& Port)
 {
-	if (!PortInfo.IsValid())
-	{
-		return nullptr;
-	}
-
-	for (ULibremidiOutput* Port : ActiveOutputPorts)
-	{
-		if (Port && Port->IsPortOpen())
-		{
-			const FLibremidiPortInfo& CurrentInfo = Port->GetCurrentPortInfo();
-			if (CurrentInfo == PortInfo)
-			{
-				return Port;
-			}
-		}
-	}
-	return nullptr;
+	FLibremidiInputInfo PortInfo(Port);
+	OnInputPortRemoved.Broadcast(PortInfo);
+	OnInputPortRemovedNative.Broadcast(PortInfo);
 }
 
-void ULibremidiEngineSubsystem::RegisterInputPort(ULibremidiInput* Port)
+void ULibremidiEngineSubsystem::HandleOutputPortAdded(const libremidi::output_port& Port)
 {
-	if (Port && !ActiveInputPorts.Contains(Port))
-	{
-		ActiveInputPorts.Add(Port);
-		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Registered input port: %s"), *Port->GetName());
-	}
+	FLibremidiOutputInfo PortInfo(Port);
+	OnOutputPortAdded.Broadcast(PortInfo);
+	OnOutputPortAddedNative.Broadcast(PortInfo);
 }
 
-void ULibremidiEngineSubsystem::UnregisterInputPort(ULibremidiInput* Port)
+void ULibremidiEngineSubsystem::HandleOutputPortRemoved(const libremidi::output_port& Port)
 {
-	if (Port)
-	{
-		ActiveInputPorts.Remove(Port);
-		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Unregistered input port: %s"), *Port->GetName());
-	}
-}
-
-void ULibremidiEngineSubsystem::RegisterOutputPort(ULibremidiOutput* Port)
-{
-	if (Port && !ActiveOutputPorts.Contains(Port))
-	{
-		ActiveOutputPorts.Add(Port);
-		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Registered output port: %s"), *Port->GetName());
-	}
-}
-
-void ULibremidiEngineSubsystem::UnregisterOutputPort(ULibremidiOutput* Port)
-{
-	if (Port)
-	{
-		ActiveOutputPorts.Remove(Port);
-		UE_LOG(LogLibremidi4UE, Verbose, TEXT("Unregistered output port: %s"), *Port->GetName());
-	}
+	FLibremidiOutputInfo PortInfo(Port);
+	OnOutputPortRemoved.Broadcast(PortInfo);
+	OnOutputPortRemovedNative.Broadcast(PortInfo);
 }

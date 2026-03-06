@@ -17,5 +17,5 @@ void FLibremidi4UEModule::ShutdownModule()
 }
 
 #undef LOCTEXT_NAMESPACE
-	
+
 IMPLEMENT_MODULE(FLibremidi4UEModule, Libremidi4UE)

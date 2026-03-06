@@ -8,14 +8,14 @@
 #include <array>
 #include <cassert>
 
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
-static LIBREMIDI_INLINE std::unique_ptr<midi_out_api>
+LIBREMIDI_STATIC_INLINE_IMPLEMENTATION std::unique_ptr<midi_out_api>
 make_midi_out_impl(auto base_conf, output_api_configuration api_conf)
 {
   std::unique_ptr<midi_out_api> ptr;
   auto from_api = [&]<typename T>(T& /*backend*/) mutable {
-    if (auto conf = std::get_if<typename T::midi_out_configuration>(&api_conf))
+    if (auto conf = get_if<typename T::midi_out_configuration>(&api_conf))
     {
       ptr = libremidi::make<typename T::midi_out>(std::move(base_conf), std::move(*conf));
       return true;
@@ -28,7 +28,7 @@ make_midi_out_impl(auto base_conf, output_api_configuration api_conf)
   return ptr;
 }
 
-static LIBREMIDI_INLINE std::unique_ptr<midi_out_api>
+LIBREMIDI_STATIC_INLINE_IMPLEMENTATION std::unique_ptr<midi_out_api>
 make_midi_out(const output_configuration& base_conf)
 {
   for (const auto& api : available_apis())
@@ -58,14 +58,14 @@ make_midi_out(const output_configuration& base_conf)
   return std::make_unique<midi_out_dummy>(output_configuration{}, dummy_configuration{});
 }
 
-static LIBREMIDI_INLINE std::unique_ptr<midi_out_api>
+LIBREMIDI_STATIC_INLINE_IMPLEMENTATION std::unique_ptr<midi_out_api>
 make_midi_out(const output_configuration& base_conf, const output_api_configuration& api_conf)
 {
-  if (std::get_if<unspecified_configuration>(&api_conf))
+  if (get_if<unspecified_configuration>(&api_conf))
   {
     return make_midi_out(base_conf);
   }
-  else if (auto api_p = std::get_if<libremidi::API>(&api_conf))
+  else if (auto api_p = get_if<libremidi::API>(&api_conf))
   {
     if (*api_p == libremidi::API::UNSPECIFIED)
     {
@@ -137,6 +137,9 @@ libremidi::API midi_out::get_current_api() const noexcept
 LIBREMIDI_INLINE
 stdx::error midi_out::open_port(const output_port& port, std::string_view portName) const
 {
+  if (port.api != get_current_api())
+    return std::errc::invalid_argument;
+
   if (auto err = m_impl->is_client_open(); err != stdx::error{})
     return std::errc::not_connected;
 

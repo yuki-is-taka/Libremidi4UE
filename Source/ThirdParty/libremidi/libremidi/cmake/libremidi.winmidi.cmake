@@ -5,7 +5,7 @@ endif()
 if(LIBREMIDI_DOWNLOAD_CPPWINRT)
   if(NOT EXISTS "${CMAKE_BINARY_DIR}/winmidi-headers.zip")
     file(DOWNLOAD
-      https://github.com/microsoft/MIDI/releases/download/dev-preview-9-namm-4/Microsoft.Windows.Devices.Midi2.1.0.2-preview-9.250121-1820.nupkg
+      https://github.com/microsoft/MIDI/releases/download/rc-1/Microsoft.Windows.Devices.Midi2.1.0.14-rc.1.209.nupkg
       "${CMAKE_BINARY_DIR}/winmidi-headers.zip"
     )
   endif()
@@ -46,12 +46,12 @@ if(CPPWINRT_TOOL)
     COMMAND "${CPPWINRT_TOOL}"
       "@${CMAKE_BINARY_DIR}/cppwinrt-src/cppwinrt-winmidi.rsp"
       -output "${CMAKE_BINARY_DIR}/cppwinrt-winmidi"
-      -verbose
   )
 
   file(
     COPY
       "${CMAKE_BINARY_DIR}/winmidi-headers/build/native/include/winmidi/init"
+      "${CMAKE_BINARY_DIR}/winmidi-headers/build/native/include/winmidi/WindowsMidiServicesAppSdkComExtensions.h"
     DESTINATION
       "${CMAKE_BINARY_DIR}/cppwinrt-winmidi/"
   )

@@ -239,7 +239,8 @@ WINRT_EXPORT namespace winrt::Microsoft::Windows::Devices::Midi2
         MidiEndpointDeviceInformationRemovedEventArgs(std::nullptr_t) noexcept {}
         MidiEndpointDeviceInformationRemovedEventArgs(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationRemovedEventArgs(ptr, take_ownership_from_abi) {}
     };
-    struct WINRT_IMPL_EMPTY_BASES MidiEndpointDeviceInformationUpdatedEventArgs : winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs
+    struct WINRT_IMPL_EMPTY_BASES MidiEndpointDeviceInformationUpdatedEventArgs : winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs,
+        impl::require<MidiEndpointDeviceInformationUpdatedEventArgs, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>
     {
         MidiEndpointDeviceInformationUpdatedEventArgs(std::nullptr_t) noexcept {}
         MidiEndpointDeviceInformationUpdatedEventArgs(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs(ptr, take_ownership_from_abi) {}

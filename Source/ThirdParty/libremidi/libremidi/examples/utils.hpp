@@ -1,8 +1,10 @@
 #pragma once
 
+#if !defined(LIBREMIDI_USE_MODULES)
 #include <libremidi/libremidi.hpp>
 // Credits to https://raw.githubusercontent.com/atsushieno/cmidi2
 #include <libremidi/cmidi2.hpp>
+#endif
 #if LIBREMIDI_USE_NI_MIDI2
   #include <midi/universal_packet.h>
 #endif
@@ -12,29 +14,29 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <variant>
 
 inline std::ostream& operator<<(std::ostream& s, libremidi::port_information::port_type t)
 {
-  using enum libremidi::port_information::port_type;
-  if (t & software)
+  if (t & libremidi::transport_type::software)
   {
     s << "software";
-    if (t & loopback)
+    if (t & libremidi::transport_type::loopback)
       s << ", loopback";
   }
 
-  if (t & hardware)
+  if (t & libremidi::transport_type::hardware)
   {
     s << "hardware";
-    if (t & usb)
+    if (t & libremidi::transport_type::usb)
       s << ", usb";
-    if (t & bluetooth)
+    if (t & libremidi::transport_type::bluetooth)
       s << ", bt";
-    if (t & pci)
+    if (t & libremidi::transport_type::pci)
       s << ", pci";
   }
 
-  if (t & network)
+  if (t & libremidi::transport_type::network)
     s << "network";
   return s;
 }
@@ -47,9 +49,9 @@ inline std::ostream& operator<<(std::ostream& s, const libremidi::container_iden
     void operator()(libremidi::uuid u) { s << "uuid"; }
     void operator()(std::string u) { s << u; }
     void operator()(uint64_t u) { s << u; }
-    void operator()(std::monostate) { }
+    void operator()(libremidi::monostate) { }
   } vis{s};
-  std::visit(vis, id);
+  visit(vis, id);
   return s;
 }
 
@@ -59,6 +61,10 @@ inline std::ostream& operator<<(std::ostream& s, const libremidi::device_identif
   {
     std::ostream& s;
     void operator()(const std::string& u) { s << u; }
+    void operator()(libremidi::usb_device_identifier u)
+    {
+      s << u.vendor_id << ":" << u.product_id;
+    }
     void operator()(uint64_t u)
     {
       auto res = static_cast<uint32_t>(u);
@@ -67,9 +73,9 @@ inline std::ostream& operator<<(std::ostream& s, const libremidi::device_identif
         << std::setfill('0') << std::setw(4) << (res & 0x0000FFFF);
       s.flags(f);
     }
-    void operator()(std::monostate) { }
+    void operator()(libremidi::monostate) { }
   } vis{s};
-  std::visit(vis, id);
+  visit(vis, id);
   return s;
 }
 
@@ -160,23 +166,27 @@ inline std::ostream& operator<<(std::ostream& s, const libremidi::port_informati
 {
   s << "[ client: " << rhs.client;
   if (rhs.container.index() > 0)
-    s << ", container: " << rhs.container;
+    s << "\n    , container: " << rhs.container;
   if (rhs.device.index() > 0)
-    s << ", device_id: " << rhs.device;
+    s << "\n    , device_id: " << rhs.device;
 
-  s << ", port: " << rhs.port;
+  s << "\n    , port: " << rhs.port;
 
   if (!rhs.manufacturer.empty())
-    s << ", manufacturer: " << rhs.manufacturer;
+    s << "\n    , manufacturer: " << rhs.manufacturer;
+  if (!rhs.product.empty())
+    s << "\n    , product: " << rhs.product;
+  if (!rhs.serial.empty())
+    s << "\n    , serial: " << rhs.serial;
   if (!rhs.device_name.empty())
-    s << ", device_name: " << rhs.device_name;
+    s << "\n    , device_name: " << rhs.device_name;
   if (!rhs.port_name.empty())
-    s << ", port_name: " << rhs.port_name;
+    s << "\n    , port_name: " << rhs.port_name;
   if (!rhs.display_name.empty())
-    s << ", display_name: " << rhs.display_name;
-  if (rhs.type != libremidi::port_information::unknown)
-    s << ", type: " << rhs.type;
-  return s << "]";
+    s << "\n    , display_name: " << rhs.display_name;
+  if (rhs.type != libremidi::transport_type::unknown)
+    s << "\n    , type: " << rhs.type;
+  return s << "\n  ]";
 }
 
 namespace libremidi::examples

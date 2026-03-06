@@ -5,7 +5,7 @@
 
 #include <thread>
 
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
 
 class observer_winmm : public observer_api
@@ -103,8 +103,12 @@ protected:
     auto rawName = ConvertToUTF8(deviceCaps.szPname);
     auto portName = rawName;
     MakeUniqueInPortName(portName, index);
+
     return {
-        {.client = 0,
+        {.api = libremidi::API::WINDOWS_MM,
+         .client = 0,
+         .device
+         = usb_device_identifier{.vendor_id = deviceCaps.wMid, .product_id = deviceCaps.wPid},
          .port = index,
          .manufacturer = "",
          .device_name = "",
@@ -120,8 +124,12 @@ protected:
     auto rawName = ConvertToUTF8(deviceCaps.szPname);
     auto portName = rawName;
     MakeUniqueOutPortName(portName, index);
+
     return {
-        {.client = 0,
+        {.api = libremidi::API::WINDOWS_MM,
+         .client = 0,
+         .device
+         = usb_device_identifier{.vendor_id = deviceCaps.wMid, .product_id = deviceCaps.wPid},
          .port = index,
          .manufacturer = "",
          .device_name = "",
@@ -164,7 +172,7 @@ protected:
 
 #if __has_include(<stop_token>) && __cpp_lib_jthread >= 201911L
   #include <stop_token>
-namespace libremidi::winmm
+NAMESPACE_LIBREMIDI::winmm
 {
 class observer_threaded final : public observer_winmm
 {
@@ -194,7 +202,7 @@ private:
 #else
   #include <atomic>
   #include <semaphore>
-namespace libremidi::winmm
+NAMESPACE_LIBREMIDI::winmm
 {
 class observer_threaded final : public observer_winmm
 {
@@ -234,7 +242,7 @@ private:
 }
 #endif
 
-namespace libremidi::winmm
+NAMESPACE_LIBREMIDI::winmm
 {
 class observer_manual final : public observer_winmm
 {
@@ -254,7 +262,7 @@ public:
   ~observer_manual() { }
 };
 }
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
 template <>
 inline std::unique_ptr<observer_api> make<observer_winmm>(

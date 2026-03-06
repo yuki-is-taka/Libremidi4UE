@@ -125,6 +125,13 @@ WINRT_EXPORT namespace winrt::Microsoft::Windows::Devices::Midi2
         IMidiEndpointDeviceInformationUpdatedEventArgs(std::nullptr_t = nullptr) noexcept {}
         IMidiEndpointDeviceInformationUpdatedEventArgs(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Windows::Foundation::IInspectable(ptr, take_ownership_from_abi) {}
     };
+    struct WINRT_IMPL_EMPTY_BASES IMidiEndpointDeviceInformationUpdatedEventArgs2 :
+        winrt::Windows::Foundation::IInspectable,
+        impl::consume_t<IMidiEndpointDeviceInformationUpdatedEventArgs2>
+    {
+        IMidiEndpointDeviceInformationUpdatedEventArgs2(std::nullptr_t = nullptr) noexcept {}
+        IMidiEndpointDeviceInformationUpdatedEventArgs2(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Windows::Foundation::IInspectable(ptr, take_ownership_from_abi) {}
+    };
     struct WINRT_IMPL_EMPTY_BASES IMidiEndpointDevicePropertyHelperStatics :
         winrt::Windows::Foundation::IInspectable,
         impl::consume_t<IMidiEndpointDevicePropertyHelperStatics>

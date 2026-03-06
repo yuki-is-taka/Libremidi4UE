@@ -1,122 +1,130 @@
+// Copyright (C) YUKI TAKA. All Rights Reserved.
+//
+// LibremidiTypes.cpp
+
 #include "LibremidiTypes.h"
 
-// FMidiPortInfo implementation
+#if PLATFORM_MAC
+#include <CoreMIDI/CoreMIDI.h>
+#endif
 
-FLibremidiPortInfo::FLibremidiPortInfo(const libremidi::port_information& InPort)
-	: ClientHandle(static_cast<int64>(InPort.client))
-	, PortHandle(static_cast<int64>(InPort.port))
-	, Manufacturer(UTF8_TO_TCHAR(InPort.manufacturer.c_str()))
-	, DeviceName(UTF8_TO_TCHAR(InPort.device_name.c_str()))
-	, PortName(UTF8_TO_TCHAR(InPort.port_name.c_str()))
-	, DisplayName(UTF8_TO_TCHAR(InPort.display_name.c_str()))
-	, PortType(static_cast<ELibremidiPortType>(InPort.type))
+// ---------------------------------------------------------------------------
+// FLibremidiPortInfo::GetOrdinal
+// ---------------------------------------------------------------------------
+//
+// Returns a deterministic per-device port ordinal based on the backend API.
+// This ordinal represents the physical position of a port within its parent
+// device, suitable for stable merge ordering.
+//
+// Per-backend strategy:
+//   CoreMIDI:     Reverse-lookup endpoint → device, then flat ordinal
+//                 across all entities (handles multi-entity devices like
+//                 Launchpad Pro MK3: 3 entities × 1 port each)
+//   WinMIDI:      MidiGroupTerminalBlock::Number() (1-based, hardware-defined)
+//   ALSA Raw:     Subdevice number extracted from packed port handle
+//   ALSA Seq:     Seq port number extracted from packed port handle
+//   Others:       Fall back to raw port handle value
+
+int32 FLibremidiPortInfo::GetOrdinal() const
 {
-	ParseContainerIdentifier(InPort.container);
-	ParseDeviceIdentifier(InPort.device);
-}
+	switch (Port.api)
+	{
+#if PLATFORM_MAC
+	case COREMIDI:
+	case COREMIDI_UMP:
+	{
+		// PortHandle is kMIDIPropertyUniqueID (SInt32 bit-cast to uint32).
+		// Reverse-lookup the MIDIEndpointRef, determine direction from ObjType,
+		// then walk the entire MIDIDevice to compute a flat ordinal across all
+		// entities. This correctly handles both multi-entity devices (e.g.
+		// Launchpad Pro MK3: 3 entities × 1 source/destination each) and
+		// multi-port entities (1 entity × N sources/destinations).
+		MIDIUniqueID UniqueId = static_cast<MIDIUniqueID>(static_cast<uint32_t>(Port.port));
 
-void FLibremidiPortInfo::ParseContainerIdentifier(const libremidi::container_identifier& Container)
-{
-	if (std::holds_alternative<libremidi::uuid>(Container))
-	{
-		ContainerType = ELibremidiContainerType::UUID;
-		const auto& UUID = std::get<libremidi::uuid>(Container);
-		ContainerUUID = BytesToHexString(UUID.bytes.data(), UUID.bytes.size());
-	}
-	else if (std::holds_alternative<std::string>(Container))
-	{
-		ContainerType = ELibremidiContainerType::String;
-		ContainerString = UTF8_TO_TCHAR(std::get<std::string>(Container).c_str());
-	}
-	else if (std::holds_alternative<std::uint64_t>(Container))
-	{
-		ContainerType = ELibremidiContainerType::Integer;
-		ContainerInteger = static_cast<int64>(std::get<std::uint64_t>(Container));
-	}
-	else
-	{
-		ContainerType = ELibremidiContainerType::None;
-	}
-}
-
-void FLibremidiPortInfo::ParseDeviceIdentifier(const libremidi::device_identifier& Device)
-{
-	if (std::holds_alternative<std::string>(Device))
-	{
-		DeviceType = ELibremidiDeviceType::String;
-		DeviceString = UTF8_TO_TCHAR(std::get<std::string>(Device).c_str());
-	}
-	else if (std::holds_alternative<std::uint64_t>(Device))
-	{
-		DeviceType = ELibremidiDeviceType::Integer;
-		DeviceInteger = static_cast<int64>(std::get<std::uint64_t>(Device));
-	}
-	else
-	{
-		DeviceType = ELibremidiDeviceType::None;
-	}
-}
-
-FString FLibremidiPortInfo::BytesToHexString(const uint8_t* Bytes, size_t Length)
-{
-	FString Result;
-	Result.Reserve(static_cast<int32>(Length * 2));
-	for (size_t i = 0; i < Length; ++i)
-	{
-		Result += FString::Printf(TEXT("%02X"), Bytes[i]);
-	}
-	return Result;
-}
-
-// API conversion implementation
-
-namespace LibremidiTypeConversion
-{
-	libremidi::API ToLibremidiAPI(ELibremidiAPI API)
-	{
-		switch (API)
+		MIDIObjectRef Obj{};
+		MIDIObjectType ObjType{};
+		OSStatus Err = MIDIObjectFindByUniqueID(UniqueId, &Obj, &ObjType);
+		if (Err != noErr)
 		{
-		case ELibremidiAPI::Unspecified: return libremidi::API::UNSPECIFIED;
-		case ELibremidiAPI::Dummy: return libremidi::API::DUMMY;
-		case ELibremidiAPI::AlsaSeq: return libremidi::API::ALSA_SEQ;
-		case ELibremidiAPI::AlsaRaw: return libremidi::API::ALSA_RAW;
-		case ELibremidiAPI::CoreMidi: return libremidi::API::COREMIDI;
-		case ELibremidiAPI::WindowsMM: return libremidi::API::WINDOWS_MM;
-		case ELibremidiAPI::WindowsUWP: return libremidi::API::WINDOWS_UWP;
-		case ELibremidiAPI::Jack: return libremidi::API::JACK_MIDI;
-		case ELibremidiAPI::PipeWire: return libremidi::API::PIPEWIRE;
-		case ELibremidiAPI::Emscripten: return libremidi::API::WEBMIDI;
-		case ELibremidiAPI::WindowsMidiServices: return libremidi::API::WINDOWS_MIDI_SERVICES;
-		case ELibremidiAPI::AlsaSeqUMP: return libremidi::API::ALSA_SEQ_UMP;
-		case ELibremidiAPI::AlsaRawUMP: return libremidi::API::ALSA_RAW_UMP;
-		case ELibremidiAPI::CoreMidiUMP: return libremidi::API::COREMIDI_UMP;
-		case ELibremidiAPI::JackUMP: return libremidi::API::JACK_UMP;
-		case ELibremidiAPI::PipeWireUMP: return libremidi::API::PIPEWIRE_UMP;
-		default: return libremidi::API::UNSPECIFIED;
+			return 0;
 		}
-	}
 
-	ELibremidiAPI FromLibremidiAPI(libremidi::API API)
-	{
-		switch (API)
+		const bool bIsSource = (ObjType == kMIDIObjectType_Source
+			|| ObjType == kMIDIObjectType_ExternalSource);
+
+		// Walk up: endpoint → entity → device
+		MIDIEntityRef Entity{};
+		MIDIEndpointGetEntity(Obj, &Entity);
+		if (!Entity)
 		{
-		case libremidi::API::UNSPECIFIED: return ELibremidiAPI::Unspecified;
-		case libremidi::API::DUMMY: return ELibremidiAPI::Dummy;
-		case libremidi::API::ALSA_SEQ: return ELibremidiAPI::AlsaSeq;
-		case libremidi::API::ALSA_RAW: return ELibremidiAPI::AlsaRaw;
-		case libremidi::API::COREMIDI: return ELibremidiAPI::CoreMidi;
-		case libremidi::API::WINDOWS_MM: return ELibremidiAPI::WindowsMM;
-		case libremidi::API::WINDOWS_UWP: return ELibremidiAPI::WindowsUWP;
-		case libremidi::API::JACK_MIDI: return ELibremidiAPI::Jack;
-		case libremidi::API::PIPEWIRE: return ELibremidiAPI::PipeWire;
-		case libremidi::API::WEBMIDI: return ELibremidiAPI::Emscripten;
-		case libremidi::API::WINDOWS_MIDI_SERVICES: return ELibremidiAPI::WindowsMidiServices;
-		case libremidi::API::ALSA_SEQ_UMP: return ELibremidiAPI::AlsaSeqUMP;
-		case libremidi::API::ALSA_RAW_UMP: return ELibremidiAPI::AlsaRawUMP;
-		case libremidi::API::COREMIDI_UMP: return ELibremidiAPI::CoreMidiUMP;
-		case libremidi::API::JACK_UMP: return ELibremidiAPI::JackUMP;
-		case libremidi::API::PIPEWIRE_UMP: return ELibremidiAPI::PipeWireUMP;
-		default: return ELibremidiAPI::Unspecified;
+			return 0;
 		}
+
+		MIDIDeviceRef Device{};
+		MIDIEntityGetDevice(Entity, &Device);
+		if (!Device)
+		{
+			// Orphan entity (no parent device) — fall back to index within entity
+			ItemCount Count = bIsSource
+				? MIDIEntityGetNumberOfSources(Entity)
+				: MIDIEntityGetNumberOfDestinations(Entity);
+			for (ItemCount i = 0; i < Count; ++i)
+			{
+				MIDIEndpointRef Ref = bIsSource
+					? MIDIEntityGetSource(Entity, i)
+					: MIDIEntityGetDestination(Entity, i);
+				if (Ref == Obj)
+				{
+					return static_cast<int32>(i);
+				}
+			}
+			return 0;
+		}
+
+		// Iterate all entities in the device, accumulating a flat ordinal
+		// across all sources (or destinations) to get a global position.
+		int32 Ordinal = 0;
+		ItemCount EntityCount = MIDIDeviceGetNumberOfEntities(Device);
+		for (ItemCount e = 0; e < EntityCount; ++e)
+		{
+			MIDIEntityRef E = MIDIDeviceGetEntity(Device, e);
+			ItemCount EndpointCount = bIsSource
+				? MIDIEntityGetNumberOfSources(E)
+				: MIDIEntityGetNumberOfDestinations(E);
+			for (ItemCount p = 0; p < EndpointCount; ++p)
+			{
+				MIDIEndpointRef Ref = bIsSource
+					? MIDIEntityGetSource(E, p)
+					: MIDIEntityGetDestination(E, p);
+				if (Ref == Obj)
+				{
+					return Ordinal;
+				}
+				++Ordinal;
+			}
+		}
+		return 0;
+	}
+#endif
+
+	case WINDOWS_MIDI_SERVICES:
+		// MidiGroupTerminalBlock::Number() — 1-based terminal block ordinal
+		return static_cast<int32>(Port.port);
+
+	case ALSA_RAW:
+	case ALSA_RAW_UMP:
+		// Packed as: (sub << 32) | (dev << 16) | card
+		// Extract subdevice number (the per-device ordinal)
+		return static_cast<int32>(Port.port >> 32);
+
+	case ALSA_SEQ:
+	case ALSA_SEQ_UMP:
+		// Packed as: (port << 32) | client
+		// Extract seq port number (the per-client ordinal)
+		return static_cast<int32>(Port.port >> 32);
+
+	default:
+		// WinMM, JACK, PipeWire, etc.: raw port handle as best-effort
+		return static_cast<int32>(Port.port);
 	}
 }

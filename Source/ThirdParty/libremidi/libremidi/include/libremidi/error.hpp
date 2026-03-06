@@ -1,11 +1,15 @@
 #pragma once
 #include <libremidi/config.hpp>
 
+#if !defined(_MSC_VER)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
 #include <libremidi/system_error2.hpp>
+#if !defined(_MSC_VER)
 #pragma GCC diagnostic pop
+#endif
 
 #include <functional>
 #include <string_view>
@@ -13,12 +17,12 @@
 
 #if __has_include(<source_location>) && (__cpp_lib_source_location >= 201907L)
   #include <source_location>
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
 using source_location = std::source_location;
 }
 #else
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
 struct source_location
 {
@@ -31,7 +35,7 @@ struct source_location
 }
 #endif
 
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
 inline auto from_errc(int64_t ret) noexcept
 {

@@ -1,128 +1,75 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
 #pragma once
 
-#include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
-#include "LibremidiTypes.h"
+
+THIRD_PARTY_INCLUDES_START
+#include <libremidi/api.hpp>
+THIRD_PARTY_INCLUDES_END
 #include "LibremidiSettings.generated.h"
 
-UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Libremidi MIDI"))
+UENUM(BlueprintType)
+enum class ELibremidiMidiProtocol : uint8
+{
+	Midi1 UMETA(DisplayName = "MIDI 1.0"),
+	Midi2 UMETA(DisplayName = "MIDI 2.0")
+};
+
+UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Libremidi MIDI 2"))
 class LIBREMIDI4UE_API ULibremidiSettings : public UDeveloperSettings
 {
 	GENERATED_BODY()
 
 public:
-	ULibremidiSettings();
+	ULibremidiSettings(const FObjectInitializer& ObjectInitializer);
 
 	virtual FName GetCategoryName() const override;
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-	virtual void PostInitProperties() override;
-	
-	/**
-	 * Dynamically generates API options for editor display
-	 * Filters to platform-specific APIs only
-	 */
-	UFUNCTION()
-	TArray<FString> GetAvailableAPIOptions() const;
+
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnSettingChanged, UObject*, struct FPropertyChangedEvent&);
+	FOnSettingChanged& OnSettingChanged() { return SettingChangedDelegate; }
 #endif
 
-	// ========================================================================
-	// Backend API Property (FString for dynamic dropdown, Enum for type safety)
-	// ========================================================================
-	
-	/**
-	 * Backend API name (stored as FString internally for dynamic editor filtering)
-	 */
-	UPROPERTY(Config, EditAnywhere, Category = "Observer", meta = (
+	libremidi::API GetResolvedBackendAPI() const;
+
+#if WITH_EDITOR
+	UFUNCTION()
+	TArray<FString> GetAvailableBackendAPIOptions() const;
+#endif
+
+	UPROPERTY(Config, EditAnywhere, Category = "Backend", meta = (
+		DisplayName = "MIDI Protocol",
+		ToolTip = "Select whether to use MIDI 1.0 or MIDI 2.0 APIs."))
+	ELibremidiMidiProtocol BackendProtocol = ELibremidiMidiProtocol::Midi2;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Backend", meta = (
 		DisplayName = "Backend API",
-		GetOptions = "GetAvailableAPIOptions",
-		ToolTip = "The MIDI API backend to use. 'Auto' automatically selects the best API with UMP priority. Invalid selections will be automatically corrected."))
+		GetOptions = "GetAvailableBackendAPIOptions",
+		ToolTip = "Backend API selection (string name)."))
 	FString BackendAPIName;
 
-	/**
-	 * Gets the backend API as an Enum value
-	 * @return Currently selected API (Enum value)
-	 */
-	UFUNCTION(BlueprintPure, Category = "MIDI|Settings")
-	ELibremidiAPI GetBackendAPI() const;
-
-	/**
-	 * Sets the backend API using an Enum value
-	 * @param API The API to set (Enum value)
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Settings")
-	void SetBackendAPI(ELibremidiAPI API);
-
-	// ========================================================================
-	// Other Settings
-	// ========================================================================
-
 	UPROPERTY(Config, EditAnywhere, Category = "Observer", meta = (
-		DisplayName = "Track Hardware Devices", 
-		ToolTip = "Enable tracking of hardware MIDI devices"))
+		DisplayName = "Track Hardware Devices",
+		ToolTip = "Detect physical MIDI devices (USB, Bluetooth, PCI, etc.)."))
 	bool bTrackHardware;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Observer", meta = (
-		DisplayName = "Track Virtual Devices", 
-		ToolTip = "Enable tracking of virtual (software) MIDI devices"))
+		DisplayName = "Track Virtual Devices",
+		ToolTip = "Detect virtual/software MIDI ports created by applications."))
 	bool bTrackVirtual;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Observer", meta = (
-		DisplayName = "Track Any Devices", 
-		ToolTip = "Enable tracking of any type of MIDI devices"))
+		DisplayName = "Track Any Devices",
+		ToolTip = "Detect all port types, including unknown or backend-specific ones."))
 	bool bTrackAny;
 
-	// ========================================================================
-	// Static Helper Methods
-	// ========================================================================
-
-	/**
-	 * Gets the platform-specific default API
-	 */
-	static ELibremidiAPI GetPlatformDefaultAPI();
-	
-	/**
-	 * Gets the preferred API for the current platform
-	 * If API is Unspecified, returns the best available API with UMP priority
-	 * Otherwise returns the specified API
-	 */
-	static ELibremidiAPI GetPreferredAPI(ELibremidiAPI RequestedAPI);
+private:
+	void NormalizeBackendAPIName();
 
 #if WITH_EDITOR
-	/**
-	 * Gets the list of APIs available for the current platform
-	 */
-	static TArray<ELibremidiAPI> GetAvailableAPIsForPlatform();
-	
-	/**
-	 * Checks if an API is compiled in and available
-	 */
-	static bool IsAPICompiledIn(ELibremidiAPI API);
-	
-	/**
-	 * Checks if an API is valid for the current platform
-	 */
-	static bool IsAPIValidForCurrentPlatform(ELibremidiAPI API);
-	
-	/**
-	 * Validates and preserves the previously selected API if possible
-	 */
-	static ELibremidiAPI ValidateAndPreserveAPI(ELibremidiAPI RequestedAPI);
-	
-	/**
-	 * Converts FString (DisplayName) to Enum value
-	 */
-	static ELibremidiAPI StringToAPI(const FString& APIName);
-	
-	/**
-	 * Converts Enum value to FString (DisplayName)
-	 */
-	static FString APIToString(ELibremidiAPI API);
+	FOnSettingChanged SettingChangedDelegate;
 #endif
-
-private:
-	/** Internal cache for performance optimization */
-	mutable ELibremidiAPI CachedBackendAPI = ELibremidiAPI::Unspecified;
-	mutable bool bCacheValid = false;
 };

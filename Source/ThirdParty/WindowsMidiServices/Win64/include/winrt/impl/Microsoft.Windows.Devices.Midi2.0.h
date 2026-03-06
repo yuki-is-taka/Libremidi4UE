@@ -169,6 +169,7 @@ WINRT_EXPORT namespace winrt::Microsoft::Windows::Devices::Midi2
     struct IMidiEndpointDeviceInformationRemovedEventArgs;
     struct IMidiEndpointDeviceInformationStatics;
     struct IMidiEndpointDeviceInformationUpdatedEventArgs;
+    struct IMidiEndpointDeviceInformationUpdatedEventArgs2;
     struct IMidiEndpointDevicePropertyHelperStatics;
     struct IMidiEndpointDeviceWatcher;
     struct IMidiEndpointDeviceWatcherStatics;
@@ -253,6 +254,7 @@ namespace winrt::impl
     template <> struct category<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationRemovedEventArgs>{ using type = interface_category; };
     template <> struct category<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationStatics>{ using type = interface_category; };
     template <> struct category<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs>{ using type = interface_category; };
+    template <> struct category<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>{ using type = interface_category; };
     template <> struct category<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDevicePropertyHelperStatics>{ using type = interface_category; };
     template <> struct category<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcher>{ using type = interface_category; };
     template <> struct category<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcherStatics>{ using type = interface_category; };
@@ -391,6 +393,7 @@ namespace winrt::impl
     template <> inline constexpr auto& name_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationRemovedEventArgs> = L"Microsoft.Windows.Devices.Midi2.IMidiEndpointDeviceInformationRemovedEventArgs";
     template <> inline constexpr auto& name_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationStatics> = L"Microsoft.Windows.Devices.Midi2.IMidiEndpointDeviceInformationStatics";
     template <> inline constexpr auto& name_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs> = L"Microsoft.Windows.Devices.Midi2.IMidiEndpointDeviceInformationUpdatedEventArgs";
+    template <> inline constexpr auto& name_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2> = L"Microsoft.Windows.Devices.Midi2.IMidiEndpointDeviceInformationUpdatedEventArgs2";
     template <> inline constexpr auto& name_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDevicePropertyHelperStatics> = L"Microsoft.Windows.Devices.Midi2.IMidiEndpointDevicePropertyHelperStatics";
     template <> inline constexpr auto& name_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcher> = L"Microsoft.Windows.Devices.Midi2.IMidiEndpointDeviceWatcher";
     template <> inline constexpr auto& name_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcherStatics> = L"Microsoft.Windows.Devices.Midi2.IMidiEndpointDeviceWatcherStatics";
@@ -442,6 +445,7 @@ namespace winrt::impl
     template <> inline constexpr guid guid_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationRemovedEventArgs>{ 0x8087B303,0x0519,0x31D1,{ 0xC0,0xDE,0xDD,0x00,0x00,0x00,0xC0,0x00 } }; // 8087B303-0519-31D1-C0DE-DD000000C000
     template <> inline constexpr guid guid_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationStatics>{ 0x8087B303,0x0519,0x31D1,{ 0xC0,0xDE,0xEE,0x00,0x00,0x00,0xA0,0x00 } }; // 8087B303-0519-31D1-C0DE-EE000000A000
     template <> inline constexpr guid guid_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs>{ 0x8087B303,0x0519,0x31D1,{ 0xC0,0xDE,0xDD,0x00,0x00,0x00,0xD0,0x00 } }; // 8087B303-0519-31D1-C0DE-DD000000D000
+    template <> inline constexpr guid guid_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>{ 0x8087B303,0x0519,0x31D1,{ 0xC0,0xDE,0xDD,0x00,0x00,0x00,0xD0,0x02 } }; // 8087B303-0519-31D1-C0DE-DD000000D002
     template <> inline constexpr guid guid_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDevicePropertyHelperStatics>{ 0x8087B303,0x0519,0x31D1,{ 0xC0,0xDE,0xEE,0x00,0x00,0x03,0x00,0x00 } }; // 8087B303-0519-31D1-C0DE-EE0000030000
     template <> inline constexpr guid guid_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcher>{ 0x8087B303,0x0519,0x31D1,{ 0xC0,0xDE,0xDD,0x00,0x00,0x00,0xE0,0x00 } }; // 8087B303-0519-31D1-C0DE-DD000000E000
     template <> inline constexpr guid guid_v<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcherStatics>{ 0x8087B303,0x0519,0x31D1,{ 0xC0,0xDE,0xEE,0x00,0x00,0x00,0xE0,0x00 } }; // 8087B303-0519-31D1-C0DE-EE000000E000
@@ -718,6 +722,13 @@ namespace winrt::impl
             virtual int32_t __stdcall get_AreAdditionalCapabilitiesUpdated(bool*) noexcept = 0;
             virtual int32_t __stdcall get_AreUniqueIdsUpdated(bool*) noexcept = 0;
             virtual int32_t __stdcall get_DeviceInformationUpdate(void**) noexcept = 0;
+        };
+    };
+    template <> struct abi<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>
+    {
+        struct WINRT_IMPL_NOVTABLE type : inspectable_abi
+        {
+            virtual int32_t __stdcall get_AreGroupTerminalBlocksUpdated(bool*) noexcept = 0;
         };
     };
     template <> struct abi<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDevicePropertyHelperStatics>
@@ -1335,6 +1346,15 @@ namespace winrt::impl
     template <> struct consume<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs>
     {
         template <typename D> using type = consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDeviceInformationUpdatedEventArgs<D>;
+    };
+    template <typename D>
+    struct consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDeviceInformationUpdatedEventArgs2
+    {
+        [[nodiscard]] auto AreGroupTerminalBlocksUpdated() const;
+    };
+    template <> struct consume<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>
+    {
+        template <typename D> using type = consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDeviceInformationUpdatedEventArgs2<D>;
     };
     template <typename D>
     struct consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDevicePropertyHelperStatics

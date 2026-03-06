@@ -9,7 +9,7 @@
 #include <cstring>
 #include <memory>
 
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
 struct jack_client
 {
@@ -41,21 +41,22 @@ struct jack_client
     }
   }
 
-  template <bool Input>
+  template <bool Input, libremidi::API Api>
   static auto to_port_info(jack_client_t* client, jack_port_t* port)
       -> std::conditional_t<Input, input_port, output_port>
   {
     return {{
+        .api = Api,
         .client = reinterpret_cast<std::uintptr_t>(client),
         .port = 0,
         .manufacturer = "",
-        .device_name = "",
+        .device_name = jack_get_client_name(client),
         .port_name = jack_port_name(port),
         .display_name = get_port_display_name(port),
     }};
   }
 
-  template <bool Input>
+  template <bool Input, libremidi::API Api>
   static auto get_ports(
       jack_client_t* client, const char* pattern, const char* type, const JackPortFlags flags,
       bool midi2) noexcept -> std::vector<std::conditional_t<Input, input_port, output_port>>
@@ -78,7 +79,7 @@ struct jack_client
       if (port)
       {
         if (bool(midi2) == bool(jack_port_flags(port) & 0x20))
-          ret.push_back(to_port_info<Input>(client, port));
+          ret.push_back(to_port_info<Input, Api>(client, port));
       }
       i++;
     }

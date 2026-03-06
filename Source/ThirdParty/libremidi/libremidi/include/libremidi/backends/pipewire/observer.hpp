@@ -5,7 +5,7 @@
 
 #include <unordered_set>
 
-namespace libremidi
+NAMESPACE_LIBREMIDI
 {
 class observer_pipewire final
     : public observer_api
@@ -27,7 +27,7 @@ public:
 
     // FIXME port rename callback
     {
-      this->add_callbacks("midi", configuration);
+      this->add_callbacks<libremidi::API::PIPEWIRE>("midi", configuration);
       this->start_thread();
     }
 
@@ -47,12 +47,14 @@ public:
 
   std::vector<libremidi::input_port> get_input_ports() const noexcept override
   {
-    return get_ports<SPA_DIRECTION_OUTPUT>("midi", this->configuration, *this->global_context);
+    return get_ports<SPA_DIRECTION_OUTPUT, libremidi::API::PIPEWIRE>(
+        "midi", this->configuration, *this->global_context);
   }
 
   std::vector<libremidi::output_port> get_output_ports() const noexcept override
   {
-    return get_ports<SPA_DIRECTION_INPUT>("midi", this->configuration, *this->global_context);
+    return get_ports<SPA_DIRECTION_INPUT, libremidi::API::PIPEWIRE>(
+        "midi", this->configuration, *this->global_context);
   }
 
   ~observer_pipewire()

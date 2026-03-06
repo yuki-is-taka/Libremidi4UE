@@ -1,7 +1,10 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
 #pragma once
 
-#include "CoreMinimal.h"
 #include "Subsystems/EngineSubsystem.h"
+#include "LibremidiInput.h"
+#include "LibremidiOutput.h"
 #include "LibremidiTypes.h"
 
 THIRD_PARTY_INCLUDES_START
@@ -10,26 +13,15 @@ THIRD_PARTY_INCLUDES_END
 
 #include "LibremidiEngineSubsystem.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiInputDeviceChanged, const FLibremidiPortInfo&, PortInfo);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMidiOutputDeviceChanged, const FLibremidiPortInfo&, PortInfo);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnMidiError, const FString&, ErrorMessage, const FString&, FileName, int32, LineNumber);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnMidiWarning, const FString&, WarningMessage, const FString&, FileName, int32, LineNumber);
+class ULibremidiSettings;
 
-/// ===================================================================================
-/// Hot-plug delegates for auto-reconnection
-/// ===================================================================================
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLibremidiObserverRestarted);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLibremidiInputPortChanged, const FLibremidiInputInfo&, PortInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLibremidiOutputPortChanged, const FLibremidiOutputInfo&, PortInfo);
 
-/**
- * Delegate for input port hot-plug events (for auto-reconnection)
- * @param PortInfo Information about the reconnected port
- */
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnInputPortConnected, const FLibremidiPortInfo&);
-
-/**
- * Delegate for output port hot-plug events (for auto-reconnection)
- * @param PortInfo Information about the reconnected port
- */
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnOutputPortConnected, const FLibremidiPortInfo&);
+DECLARE_MULTICAST_DELEGATE(FOnLibremidiObserverRestartedNative);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnLibremidiInputPortChangedNative, const FLibremidiInputInfo&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnLibremidiOutputPortChangedNative, const FLibremidiOutputInfo&);
 
 UCLASS()
 class LIBREMIDI4UE_API ULibremidiEngineSubsystem : public UEngineSubsystem
@@ -40,174 +32,80 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiInputDeviceChanged OnInputDeviceAdded;
+	UFUNCTION(BlueprintPure, Category = "MIDI|Observer")
+	TArray<FLibremidiInputInfo> GetInputPorts() const;
 
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiInputDeviceChanged OnInputDeviceRemoved;
+	UFUNCTION(BlueprintPure, Category = "MIDI|Observer")
+	TArray<FLibremidiOutputInfo> GetOutputPorts() const;
 
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiOutputDeviceChanged OnOutputDeviceAdded;
+	libremidi::API GetObserverApi() const;
 
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiOutputDeviceChanged OnOutputDeviceRemoved;
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports")
+	ULibremidiInput* CreateInput(
+		ELibremidiMidiProtocol Protocol,
+		bool bInIgnoreSysex,
+		bool bInIgnoreTiming,
+		bool bInIgnoreSensing,
+		ELibremidiTimestampMode Mode,
+		bool bInMidi1ChannelEventsToMidi2);
 
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiError OnError;
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports")
+	void DestroyInput(ULibremidiInput* Input);
 
-	UPROPERTY(BlueprintAssignable, Category = "MIDI|Events")
-	FOnMidiWarning OnWarning;
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports")
+	ULibremidiOutput* CreateOutput(
+		ELibremidiMidiProtocol Protocol,
+		ELibremidiTimestampMode Mode);
 
-	/// ================================================================================
-	/// Hot-plug Events (for auto-reconnection)
-	/// ================================================================================
+	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports")
+	void DestroyOutput(ULibremidiOutput* Output);
 
-	/**
-	 * Native delegate for input port reconnection (not exposed to Blueprint)
-	 * Used by ULibremidiInput instances for auto-reconnection logic
-	 */
-	FOnInputPortConnected OnInputPortConnected;
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Observer")
+	FOnLibremidiObserverRestarted OnObserverRestarted;
 
-	/**
-	 * Native delegate for output port reconnection (not exposed to Blueprint)
-	 * Used by ULibremidiOutput instances for auto-reconnection logic
-	 */
-	FOnOutputPortConnected OnOutputPortReconnected;
+	FOnLibremidiObserverRestartedNative OnObserverRestartedNative;
 
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Configuration", meta = (DisplayName = "Set MIDI API", ToolTip = "Set the MIDI API to use. Observer will be restarted."))
-	void SetMidiAPI(ELibremidiAPI API);
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Observer")
+	FOnLibremidiInputPortChanged OnInputPortAdded;
 
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Configuration", meta = (DisplayName = "Set Track Hardware Devices", ToolTip = "Enable/disable tracking of hardware MIDI devices. Observer will be restarted."))
-	void SetTrackHardware(bool bEnabled);
+	FOnLibremidiInputPortChangedNative OnInputPortAddedNative;
 
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Configuration", meta = (DisplayName = "Set Track Virtual Devices", ToolTip = "Enable/disable tracking of virtual MIDI devices. Observer will be restarted."))
-	void SetTrackVirtual(bool bEnabled);
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Observer")
+	FOnLibremidiInputPortChanged OnInputPortRemoved;
 
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Configuration", meta = (DisplayName = "Set Track Any Devices", ToolTip = "Enable/disable tracking of any MIDI devices. Observer will be restarted."))
-	void SetTrackAny(bool bEnabled);
+	FOnLibremidiInputPortChangedNative OnInputPortRemovedNative;
 
-	UFUNCTION(BlueprintPure, Category = "MIDI|Configuration", meta = (DisplayName = "Get MIDI API"))
-	ELibremidiAPI GetMidiAPI() const { return MidiAPI; }
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Observer")
+	FOnLibremidiOutputPortChanged OnOutputPortAdded;
 
-	UFUNCTION(BlueprintPure, Category = "MIDI|Configuration", meta = (DisplayName = "Get Track Hardware Devices"))
-	bool GetTrackHardware() const { return bTrackHardware; }
+	FOnLibremidiOutputPortChangedNative OnOutputPortAddedNative;
 
-	UFUNCTION(BlueprintPure, Category = "MIDI|Configuration", meta = (DisplayName = "Get Track Virtual Devices"))
-	bool GetTrackVirtual() const { return bTrackVirtual; }
+	UPROPERTY(BlueprintAssignable, Category = "MIDI|Observer")
+	FOnLibremidiOutputPortChanged OnOutputPortRemoved;
 
-	UFUNCTION(BlueprintPure, Category = "MIDI|Configuration", meta = (DisplayName = "Get Track Any Devices"))
-	bool GetTrackAny() const { return bTrackAny; }
+	FOnLibremidiOutputPortChangedNative OnOutputPortRemovedNative;
 
-	UFUNCTION(BlueprintPure, Category = "MIDI|Configuration", meta = (DisplayName = "Get Current API"))
-	ELibremidiAPI GetCurrentAPI() const;
-
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Available Input Ports"))
-	TArray<FLibremidiPortInfo> GetAvailableInputPorts() const;
-
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Available Output Ports"))
-	TArray<FLibremidiPortInfo> GetAvailableOutputPorts() const;
-
-	/// ==============================================================================
-	/// Port Management
-	/// ==============================================================================
-
-	/**
-	 * Get all active input ports
-	 * @return Array of active input ports
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Active Input Ports"))
-	TArray<ULibremidiInput*> GetActiveInputPorts() const;
-
-	/**
-	 * Get all active output ports
-	 * @return Array of active output ports
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Ports", meta = (DisplayName = "Get Active Output Ports"))
-	TArray<ULibremidiOutput*> GetActiveOutputPorts() const;
-
-	/**
-	 * Find an active input port by port info
-	 * @param PortInfo The port info to search for
-	 * @return The active input port, or nullptr if not found
-	 */
-	ULibremidiInput* FindActiveInputPort(const FLibremidiPortInfo& PortInfo) const;
-
-	/**
-	 * Find an active output port by port info
-	 * @param PortInfo The port info to search for
-	 * @return The active output port, or nullptr if not found
-	 */
-	ULibremidiOutput* FindActiveOutputPort(const FLibremidiPortInfo& PortInfo) const;
+private:
+	void StartObserver();
+	void StopObserver();
+	void LogObserverInfo() const;
+#if WITH_EDITOR
+	void HandleSettingsChanged(UObject* SettingsObject, struct FPropertyChangedEvent& PropertyChangedEvent);
+#endif
+	void HandleInputPortAdded(const libremidi::input_port& Port);
+	void HandleInputPortRemoved(const libremidi::input_port& Port);
+	void HandleOutputPortAdded(const libremidi::output_port& Port);
+	void HandleOutputPortRemoved(const libremidi::output_port& Port);
 
 private:
 	TUniquePtr<libremidi::observer> Observer;
-
-	ELibremidiAPI MidiAPI = ELibremidiAPI::Unspecified;
-	bool bTrackHardware = true;
-	bool bTrackVirtual = true;
-	bool bTrackAny = false;
-
-	void StartObserver();
-	void StopObserver();
-	void RestartObserver();
-	
-	void LogAvailableAPIs() const;
-	
-	libremidi::observer_configuration CreateObserverConfiguration() const;
-	libremidi::observer_api_configuration CreateObserverAPIConfiguration() const;
-
-public:
-	/**
-	 * Log all available MIDI devices connected to the system.
-	 * This can be called multiple times to refresh the device list.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MIDI|Debug", meta = (DisplayName = "Log Available Devices"))
-	void LogAvailableDevices();
-
-private:
-	void HandleError(std::string_view ErrorText, const libremidi::source_location& Location) const;
-	void HandleWarning(std::string_view WarningText, const libremidi::source_location& Location) const;
-	void HandleInputDeviceAdded(const libremidi::input_port& Port) const;
-	void HandleInputDeviceRemoved(const libremidi::input_port& Port) const;
-	void HandleOutputDeviceAdded(const libremidi::output_port& Port) const;
-	void HandleOutputDeviceRemoved(const libremidi::output_port& Port) const;
-
-	/// ==============================================================================
-	/// Internal Port Management
-	/// ==============================================================================
-
-	/**
-	 * Register an input port (called by ULibremidiInput)
-	 * @param Port The input port to register
-	 */
-	void RegisterInputPort(ULibremidiInput* Port);
-
-	/**
-	 * Unregister an input port (called by ULibremidiInput)
-	 * @param Port The input port to unregister
-	 */
-	void UnregisterInputPort(ULibremidiInput* Port);
-
-	/**
-	 * Register an output port (called by ULibremidiOutput)
-	 * @param Port The output port to register
-	 */
-	void RegisterOutputPort(ULibremidiOutput* Port);
-
-	/**
-	 * Unregister an output port (called by ULibremidiOutput)
-	 * @param Port The output port to unregister
-	 */
-	void UnregisterOutputPort(ULibremidiOutput* Port);
-
-	// Active ports (managed by GC via UPROPERTY)
-	UPROPERTY()
-	TArray<TObjectPtr<ULibremidiInput>> ActiveInputPorts;
+#if WITH_EDITOR
+	FDelegateHandle SettingsChangedHandle;
+#endif
 
 	UPROPERTY()
-	TArray<TObjectPtr<ULibremidiOutput>> ActiveOutputPorts;
+	TArray<TObjectPtr<ULibremidiInput>> Inputs;
 
-	// Friend classes for internal access
-	friend class ULibremidiInput;
-	friend class ULibremidiOutput;
+	UPROPERTY()
+	TArray<TObjectPtr<ULibremidiOutput>> Outputs;
 };

@@ -2274,6 +2274,24 @@ namespace winrt::impl
         }
         return winrt::Windows::Devices::Enumeration::DeviceInformationUpdate{ value, take_ownership_from_abi };
     }
+    template <typename D> auto consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDeviceInformationUpdatedEventArgs2<D>::AreGroupTerminalBlocksUpdated() const
+    {
+        bool value{};
+        if constexpr (!std::is_same_v<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->get_AreGroupTerminalBlocksUpdated(&value));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>**)this;
+            check_hresult(_winrt_abi_type->get_AreGroupTerminalBlocksUpdated(&value));
+        }
+        return value;
+    }
     template <typename D> auto consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDevicePropertyHelperStatics<D>::GetMidiPropertyNameFromPropertyKey(winrt::guid const& fmtid, uint32_t pid) const
     {
         void* result{};
@@ -6210,6 +6228,17 @@ namespace winrt::impl
         catch (...) { return to_hresult(); }
     };
 #endif
+    template <typename D>
+    struct produce<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2> : produce_base<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2>
+    {
+        int32_t __stdcall get_AreGroupTerminalBlocksUpdated(bool* value) noexcept final try
+        {
+            typename D::abi_guard guard(this->shim());
+            *value = detach_from<bool>(this->shim().AreGroupTerminalBlocksUpdated());
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+    };
 #ifndef WINRT_LEAN_AND_MEAN
     template <typename D>
     struct produce<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDevicePropertyHelperStatics> : produce_base<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDevicePropertyHelperStatics>
@@ -8168,6 +8197,7 @@ namespace std
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationRemovedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationStatics> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationUpdatedEventArgs2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDevicePropertyHelperStatics> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcher> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceWatcherStatics> : winrt::impl::hash_base {};
