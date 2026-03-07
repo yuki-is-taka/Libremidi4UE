@@ -40,14 +40,6 @@ An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/librem
 
 The `Source/ThirdParty/WindowsMidiServices/` directory contains a minimal set of C++/WinRT projection headers for Windows MIDI Services (generated with `cppwinrt.exe v2.0.250303.1`). These are required for MIDI 2.0 support on Windows. See [Source/ThirdParty/WindowsMidiServices/README.md](Source/ThirdParty/WindowsMidiServices/README.md) for details.
 
-### Known build issue
-
-After updating the libremidi submodule, you may need to patch:
-
-**File**: `Source/ThirdParty/libremidi/libremidi/include/libremidi/backends/winmidi/helpers.hpp`
-
-Remove the duplicate `using namespace Windows::Devices::Enumeration;` line (without `winrt::` prefix). The line with `winrt::Windows::Devices::Enumeration` should remain.
-
 ## Quick Start
 
 ### C++
