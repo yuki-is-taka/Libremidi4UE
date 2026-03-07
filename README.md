@@ -38,7 +38,7 @@ An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/librem
 
 ### Windows MIDI Services setup (Windows only)
 
-The `Source/ThirdParty/WindowsMidiServices/` directory contains pre-generated C++/WinRT projection headers for Windows MIDI Services. These are required for MIDI 2.0 support on Windows. See [Source/ThirdParty/WindowsMidiServices/README.md](Source/ThirdParty/WindowsMidiServices/README.md) for details.
+The `Source/ThirdParty/WindowsMidiServices/` directory contains a minimal set of C++/WinRT projection headers for Windows MIDI Services (generated with `cppwinrt.exe v2.0.250303.1`). These are required for MIDI 2.0 support on Windows. See [Source/ThirdParty/WindowsMidiServices/README.md](Source/ThirdParty/WindowsMidiServices/README.md) for details.
 
 ### Known build issue
 
