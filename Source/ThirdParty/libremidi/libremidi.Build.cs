@@ -1,4 +1,5 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright (c) 2025-2026, YUKI TAKA. All rights reserved.
+// Licensed under the BSD 2-Clause License. See LICENSE file for details.
 //
 // IMPORTANT: libremidi requires manual patching after submodule update.
 // File: libremidi/include/libremidi/backends/winmidi/helpers.hpp

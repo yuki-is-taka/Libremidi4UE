@@ -1,6 +1,5 @@
-// Copyright (C) YUKI TAKA. All Rights Reserved.
-//
-// LibremidiMessage.h
+// Copyright (c) 2025-2026, YUKI TAKA. All rights reserved.
+// Licensed under the BSD 2-Clause License. See LICENSE file for details.
 //
 // UE-friendly wrappers for libremidi MIDI messages.
 // Two separate types for MIDI 1.0 and UMP — no runtime branching needed.
