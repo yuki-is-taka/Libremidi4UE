@@ -17,7 +17,7 @@ enum class ELibremidiMidiProtocol : uint8
 	Midi2 UMETA(DisplayName = "MIDI 2.0")
 };
 
-UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Libremidi MIDI 2"))
+UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Libremidi"))
 class LIBREMIDI4UE_API ULibremidiSettings : public UDeveloperSettings
 {
 	GENERATED_BODY()
