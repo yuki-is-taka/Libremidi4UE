@@ -7,6 +7,7 @@
 
 THIRD_PARTY_INCLUDES_START
 #include <libremidi/observer_configuration.hpp>
+#include <libremidi/port_comparison.hpp>
 THIRD_PARTY_INCLUDES_END
 
 #include "LibremidiTypes.generated.h"
@@ -25,7 +26,8 @@ enum class ELibremidiDeviceIdentifierType : uint8
 {
 	None UMETA(DisplayName = "None"),
 	String UMETA(DisplayName = "String"),
-	Integer UMETA(DisplayName = "Integer")
+	Integer UMETA(DisplayName = "Integer"),
+	USBDevice UMETA(DisplayName = "USB Device")
 };
 
 UENUM(BlueprintType, meta = (Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
@@ -65,16 +67,16 @@ struct LIBREMIDI4UE_API FLibremidiContainerIdentifier
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Container")
 	ELibremidiContainerIdentifierType Type = ELibremidiContainerIdentifierType::None;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Container")
 	TArray<uint8> UUIDBytes;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Container")
 	FString String;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Container")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Container")
 	int64 Integer = 0;
 
 	static FLibremidiContainerIdentifier FromLibremidi(const libremidi::container_identifier& Identifier)
@@ -127,14 +129,21 @@ struct LIBREMIDI4UE_API FLibremidiDeviceIdentifier
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Device")
 	ELibremidiDeviceIdentifierType Type = ELibremidiDeviceIdentifierType::None;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Device")
 	FString String;
 
-	UPROPERTY(BlueprintReadOnly, Category = "MIDI|Device")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Device")
 	int64 Integer = 0;
+
+	/** USB vendor/product IDs (valid when Type == USBDevice). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Device")
+	int32 USBVendorId = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Device")
+	int32 USBProductId = 0;
 
 	static FLibremidiDeviceIdentifier FromLibremidi(const libremidi::device_identifier& Identifier)
 	{
@@ -149,6 +158,13 @@ struct LIBREMIDI4UE_API FLibremidiDeviceIdentifier
 			Result.Type = ELibremidiDeviceIdentifierType::Integer;
 			Result.Integer = static_cast<int64>(std::get<std::uint64_t>(Identifier));
 		}
+		else if (std::holds_alternative<libremidi::usb_device_identifier>(Identifier))
+		{
+			Result.Type = ELibremidiDeviceIdentifierType::USBDevice;
+			const auto& USB = std::get<libremidi::usb_device_identifier>(Identifier);
+			Result.USBVendorId = USB.vendor_id;
+			Result.USBProductId = USB.product_id;
+		}
 		return Result;
 	}
 
@@ -160,6 +176,11 @@ struct LIBREMIDI4UE_API FLibremidiDeviceIdentifier
 			return std::string(TCHAR_TO_UTF8(*String));
 		case ELibremidiDeviceIdentifierType::Integer:
 			return static_cast<std::uint64_t>(Integer);
+		case ELibremidiDeviceIdentifierType::USBDevice:
+			return libremidi::usb_device_identifier{
+				static_cast<uint16_t>(USBVendorId),
+				static_cast<uint16_t>(USBProductId)
+			};
 		default:
 			return std::monostate{};
 		}
@@ -173,81 +194,120 @@ struct LIBREMIDI4UE_API FLibremidiPortInfo
 
 	FLibremidiPortInfo() = default;
 
-	explicit FLibremidiPortInfo(const libremidi::port_information& InPort)
-		: Port(InPort)
-	{
-	}
+	explicit FLibremidiPortInfo(const libremidi::port_information& InPort);
+	explicit FLibremidiPortInfo(libremidi::port_information&& InPort);
 
-	explicit FLibremidiPortInfo(libremidi::port_information&& InPort)
-		: Port(MoveTemp(InPort))
-	{
-	}
+	// ===== Serializable fields (UPROPERTY) =====
 
-	const libremidi::port_information& GetPort() const
-	{
-		return Port;
-	}
+	/** Backend API that produced this port (stored as int for serialization; cast to/from libremidi::API). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	int32 Api = 0;
 
-	libremidi::port_information& GetPort()
-	{
-		return Port;
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FLibremidiContainerIdentifier ContainerId;
 
-	uint64 GetClientHandle() const
-	{
-		return Port.client;
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FLibremidiDeviceIdentifier DeviceId;
 
-	uint64 GetPortHandle() const
-	{
-		return Port.port;
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	int64 PortHandle = -1;
 
-	FLibremidiContainerIdentifier GetContainerIdentifier() const
-	{
-		return FLibremidiContainerIdentifier::FromLibremidi(Port.container);
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	int64 ClientHandle = -1;
 
-	FLibremidiDeviceIdentifier GetDeviceIdentifier() const
-	{
-		return FLibremidiDeviceIdentifier::FromLibremidi(Port.device);
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FString Manufacturer;
 
-	FString GetManufacturer() const
-	{
-		return UTF8_TO_TCHAR(Port.manufacturer.c_str());
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FString Product;
 
-	FString GetDeviceName() const
-	{
-		return UTF8_TO_TCHAR(Port.device_name.c_str());
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FString Serial;
 
-	FString GetPortName() const
-	{
-		return UTF8_TO_TCHAR(Port.port_name.c_str());
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FString DeviceName;
 
-	FString GetDisplayName() const
-	{
-		return UTF8_TO_TCHAR(Port.display_name.c_str());
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FString PortName;
 
-	ELibremidiPortType GetPortType() const
-	{
-		return static_cast<ELibremidiPortType>(Port.type);
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	FString DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	ELibremidiPortType PortType = ELibremidiPortType::Unknown;
+
+	/** Cached ordinal computed at construction from API-specific logic. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MIDI|Port")
+	int32 Ordinal = 0;
+
+	// ===== Native access =====
+
+	/** Returns the cached native port_information. Only fully valid when constructed from a live port. */
+	const libremidi::port_information& GetPort() const { return CachedNative; }
+	libremidi::port_information& GetPort() { return CachedNative; }
+
+	/** Reconstructs a native port_information from the serialized UPROPERTY fields. */
+	libremidi::port_information ToPortInformation() const;
+
+	// ===== Convenience getters =====
+
+	uint64 GetClientHandle() const { return static_cast<uint64>(ClientHandle); }
+	uint64 GetPortHandle() const { return static_cast<uint64>(PortHandle); }
+	FLibremidiContainerIdentifier GetContainerIdentifier() const { return ContainerId; }
+	FLibremidiDeviceIdentifier GetDeviceIdentifier() const { return DeviceId; }
+	FString GetManufacturer() const { return Manufacturer; }
+	FString GetDeviceName() const { return DeviceName; }
+	FString GetPortName() const { return PortName; }
+	FString GetDisplayName() const { return DisplayName; }
+	ELibremidiPortType GetPortType() const { return PortType; }
 
 	/**
 	 * Returns a deterministic per-device port ordinal for stable merge ordering.
-	 * Uses API-specific logic (CoreMIDI entity index, WinMIDI terminal block number,
-	 * ALSA packed sub/port, etc.).
-	 * CoreMIDI: direction is self-determined via MIDIObjectType from reverse-lookup.
+	 * When constructed from a live port, this is computed via API-specific logic
+	 * (CoreMIDI entity index, WinMIDI terminal block number, ALSA packed sub/port, etc.).
+	 * When deserialized, returns the cached value.
 	 */
-	int32 GetOrdinal() const;
+	int32 GetOrdinal() const { return Ordinal; }
+
+	// ===== Port matching =====
+
+	/** Result of FindClosestPort(). */
+	struct FMatchResult
+	{
+		/** Index into the candidates array, or INDEX_NONE if not found. */
+		int32 Index = INDEX_NONE;
+
+		/** Heuristic match score (higher = better). Only meaningful when Index != INDEX_NONE. */
+		int32 Score = 0;
+
+		bool IsValid() const { return Index != INDEX_NONE; }
+	};
+
+	/**
+	 * Finds the candidate port that most closely matches this port info,
+	 * using libremidi's heuristic matcher (hardware IDs, serial, names, handles).
+	 * Works with both live ports and deserialized port info.
+	 *
+	 * @param Candidates  Array of ports to search through.
+	 * @return  Match result with index into Candidates and score, or INDEX_NONE if no match.
+	 */
+	FMatchResult FindClosestPort(TArrayView<const FLibremidiPortInfo> Candidates) const;
+
+	/** Convenience overload for FLibremidiInputInfo arrays. */
+	FMatchResult FindClosestPort(TArrayView<const FLibremidiInputInfo> Candidates) const;
+
+	/** Convenience overload for FLibremidiOutputInfo arrays. */
+	FMatchResult FindClosestPort(TArrayView<const FLibremidiOutputInfo> Candidates) const;
 
 private:
-	libremidi::port_information Port;
+	/** Native port_information. Populated by constructors; empty after deserialization. */
+	libremidi::port_information CachedNative;
+
+	/** Populate UPROPERTY fields from CachedNative. */
+	void SyncPropertiesFromNative();
+
+	/** Compute ordinal from native port_information using API-specific logic. */
+	static int32 ComputeOrdinalFromNative(const libremidi::port_information& Port);
 };
 
 USTRUCT(BlueprintType)
