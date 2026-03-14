@@ -8,7 +8,127 @@
 #endif
 
 // ---------------------------------------------------------------------------
-// FLibremidiPortInfo::GetOrdinal
+// FLibremidiPortInfo constructors
+// ---------------------------------------------------------------------------
+
+FLibremidiPortInfo::FLibremidiPortInfo(const libremidi::port_information& InPort)
+	: CachedNative(InPort)
+{
+	SyncPropertiesFromNative();
+}
+
+FLibremidiPortInfo::FLibremidiPortInfo(libremidi::port_information&& InPort)
+	: CachedNative(MoveTemp(InPort))
+{
+	SyncPropertiesFromNative();
+}
+
+// ---------------------------------------------------------------------------
+// FLibremidiPortInfo::SyncPropertiesFromNative
+// ---------------------------------------------------------------------------
+
+void FLibremidiPortInfo::SyncPropertiesFromNative()
+{
+	Api = static_cast<int32>(CachedNative.api);
+	ContainerId = FLibremidiContainerIdentifier::FromLibremidi(CachedNative.container);
+	DeviceId = FLibremidiDeviceIdentifier::FromLibremidi(CachedNative.device);
+	PortHandle = static_cast<int64>(CachedNative.port);
+	ClientHandle = static_cast<int64>(CachedNative.client);
+	Manufacturer = UTF8_TO_TCHAR(CachedNative.manufacturer.c_str());
+	Product = UTF8_TO_TCHAR(CachedNative.product.c_str());
+	Serial = UTF8_TO_TCHAR(CachedNative.serial.c_str());
+	DeviceName = UTF8_TO_TCHAR(CachedNative.device_name.c_str());
+	PortName = UTF8_TO_TCHAR(CachedNative.port_name.c_str());
+	DisplayName = UTF8_TO_TCHAR(CachedNative.display_name.c_str());
+	PortType = static_cast<ELibremidiPortType>(CachedNative.type);
+	Ordinal = ComputeOrdinalFromNative(CachedNative);
+}
+
+// ---------------------------------------------------------------------------
+// FLibremidiPortInfo::ToPortInformation
+// ---------------------------------------------------------------------------
+
+libremidi::port_information FLibremidiPortInfo::ToPortInformation() const
+{
+	libremidi::port_information Result;
+	Result.api = static_cast<libremidi::API>(Api);
+	Result.container = ContainerId.ToLibremidi();
+	Result.device = DeviceId.ToLibremidi();
+	Result.port = static_cast<libremidi::port_handle>(PortHandle);
+	Result.client = static_cast<libremidi::client_handle>(ClientHandle);
+	Result.manufacturer = TCHAR_TO_UTF8(*Manufacturer);
+	Result.product = TCHAR_TO_UTF8(*Product);
+	Result.serial = TCHAR_TO_UTF8(*Serial);
+	Result.device_name = TCHAR_TO_UTF8(*DeviceName);
+	Result.port_name = TCHAR_TO_UTF8(*PortName);
+	Result.display_name = TCHAR_TO_UTF8(*DisplayName);
+	Result.type = static_cast<libremidi::transport_type>(PortType);
+	return Result;
+}
+
+// ---------------------------------------------------------------------------
+// FLibremidiPortInfo::FindClosestPort
+// ---------------------------------------------------------------------------
+
+FLibremidiPortInfo::FMatchResult FLibremidiPortInfo::FindClosestPort(
+	TArrayView<const FLibremidiPortInfo> Candidates) const
+{
+	if (Candidates.IsEmpty())
+	{
+		return {};
+	}
+
+	// Build native array from candidates.
+	// Use CachedNative for live ports (non-default api), ToPortInformation() for deserialized.
+	TArray<libremidi::port_information> NativeCandidates;
+	NativeCandidates.Reserve(Candidates.Num());
+	for (const FLibremidiPortInfo& C : Candidates)
+	{
+		NativeCandidates.Add(
+			C.CachedNative.api != libremidi::API::UNSPECIFIED
+				? C.CachedNative
+				: C.ToPortInformation());
+	}
+
+	const libremidi::port_information Target =
+		CachedNative.api != libremidi::API::UNSPECIFIED
+			? CachedNative
+			: ToPortInformation();
+
+	const auto Result = libremidi::find_closest_port(
+		Target,
+		std::span<const libremidi::port_information>{NativeCandidates.GetData(),
+			static_cast<size_t>(NativeCandidates.Num())});
+
+	if (!Result.found)
+	{
+		return {};
+	}
+
+	const int32 Index = static_cast<int32>(Result.port - NativeCandidates.GetData());
+	return {Index, Result.score};
+}
+
+FLibremidiPortInfo::FMatchResult FLibremidiPortInfo::FindClosestPort(
+	TArrayView<const FLibremidiInputInfo> Candidates) const
+{
+	// FLibremidiInputInfo layout-inherits FLibremidiPortInfo with no added fields,
+	// so reinterpret is safe.
+	return FindClosestPort(TArrayView<const FLibremidiPortInfo>{
+		reinterpret_cast<const FLibremidiPortInfo*>(Candidates.GetData()),
+		Candidates.Num()});
+}
+
+FLibremidiPortInfo::FMatchResult FLibremidiPortInfo::FindClosestPort(
+	TArrayView<const FLibremidiOutputInfo> Candidates) const
+{
+	return FindClosestPort(TArrayView<const FLibremidiPortInfo>{
+		reinterpret_cast<const FLibremidiPortInfo*>(Candidates.GetData()),
+		Candidates.Num()});
+}
+
+// ---------------------------------------------------------------------------
+// FLibremidiPortInfo::ComputeOrdinalFromNative
 // ---------------------------------------------------------------------------
 //
 // Returns a deterministic per-device port ordinal based on the backend API.
@@ -24,7 +144,7 @@
 //   ALSA Seq:     Seq port number extracted from packed port handle
 //   Others:       Fall back to raw port handle value
 
-int32 FLibremidiPortInfo::GetOrdinal() const
+int32 FLibremidiPortInfo::ComputeOrdinalFromNative(const libremidi::port_information& Port)
 {
 	switch (Port.api)
 	{
@@ -82,7 +202,7 @@ int32 FLibremidiPortInfo::GetOrdinal() const
 
 		// Iterate all entities in the device, accumulating a flat ordinal
 		// across all sources (or destinations) to get a global position.
-		int32 Ordinal = 0;
+		int32 ComputedOrdinal = 0;
 		ItemCount EntityCount = MIDIDeviceGetNumberOfEntities(Device);
 		for (ItemCount e = 0; e < EntityCount; ++e)
 		{
@@ -97,9 +217,9 @@ int32 FLibremidiPortInfo::GetOrdinal() const
 					: MIDIEntityGetDestination(E, p);
 				if (Ref == Obj)
 				{
-					return Ordinal;
+					return ComputedOrdinal;
 				}
-				++Ordinal;
+				++ComputedOrdinal;
 			}
 		}
 		return 0;
