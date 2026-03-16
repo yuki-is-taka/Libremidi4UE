@@ -311,14 +311,20 @@ void ULibremidiInput::HandleRawData(std::span<const uint8_t> Data, libremidi::ti
 
 void ULibremidiInput::HandleUmpMessage(libremidi::ump&& Message)
 {
+	const uint8 MT = static_cast<uint8>((Message.data[0] >> 28) & 0x0F);
+	UE_LOG(LogLibremidi4UE, Verbose,
+		TEXT("HandleUmpMessage: MT=0x%X Word0=0x%08X port='%s'"),
+		MT, Message.data[0], *GetName());
+
 	FLibremidiUmpMessage Wrapped(MoveTemp(Message));
 	OnUmpMessage.Broadcast(this, Wrapped);
 }
 
 void ULibremidiInput::HandleUmpRawData(std::span<const uint32_t> Data, libremidi::timestamp Timestamp)
 {
-	// Raw callback path — not using on_message packetization.
-	// Currently unused; available for future direct-word consumers.
+	UE_LOG(LogLibremidi4UE, Verbose,
+		TEXT("HandleUmpRawData: words=%d port='%s'"),
+		static_cast<int32>(Data.size()), *GetName());
 }
 
 void ULibremidiInput::HandleError(std::string_view ErrorText, const libremidi::source_location& Location)

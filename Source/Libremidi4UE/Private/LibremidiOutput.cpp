@@ -245,9 +245,19 @@ bool ULibremidiOutput::SendRawUmpMessage(TArrayView<const uint32> Data)
 		return false;
 	}
 
+	UE_LOG(LogLibremidi4UE, Verbose,
+		TEXT("SendRawUmpMessage: %d words, Word0=0x%08X port='%s'"),
+		Data.Num(), Data.Num() > 0 ? Data[0] : 0, *GetName());
+
 	const stdx::error Err = MidiOut->send_ump(
 		std::span<const uint32_t>(Data.GetData(), Data.Num()));
-	return Err == stdx::error{};
+	const bool bOk = (Err == stdx::error{});
+	if (!bOk)
+	{
+		UE_LOG(LogLibremidi4UE, Warning,
+			TEXT("SendRawUmpMessage: send_ump failed, port='%s'"), *GetName());
+	}
+	return bOk;
 }
 
 // ---------------------------------------------------------------------------
