@@ -53,6 +53,24 @@ namespace winrt::impl
         }
         return hstring{ value, take_ownership_from_abi };
     }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceAccessChangedEventArgs3<D>::UserPromptRequired() const
+    {
+        bool value{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs3>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs3, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs3>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->get_UserPromptRequired(&value));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs3>**)this;
+            check_hresult(_winrt_abi_type->get_UserPromptRequired(&value));
+        }
+        return value;
+    }
     template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceAccessInformation<D>::AccessChanged(winrt::Windows::Foundation::TypedEventHandler<winrt::Windows::Devices::Enumeration::DeviceAccessInformation, winrt::Windows::Devices::Enumeration::DeviceAccessChangedEventArgs> const& handler) const
     {
         winrt::event_token cookie{};
@@ -108,6 +126,24 @@ namespace winrt::impl
             check_hresult(_winrt_abi_type->get_CurrentStatus(reinterpret_cast<int32_t*>(&status)));
         }
         return status;
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceAccessInformation2<D>::UserPromptRequired() const
+    {
+        bool value{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceAccessInformation2>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceAccessInformation2, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceAccessInformation2>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->get_UserPromptRequired(&value));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceAccessInformation2>**)this;
+            check_hresult(_winrt_abi_type->get_UserPromptRequired(&value));
+        }
+        return value;
     }
     template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceAccessInformationStatics<D>::CreateFromId(param::hstring const& deviceId) const
     {
@@ -485,6 +521,60 @@ namespace winrt::impl
         {
             auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing>**)this;
             _winrt_abi_type->remove_PairingRequested(impl::bind_in(token));
+        }
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationCustomPairing2<D>::AddPairingSetMember(winrt::Windows::Devices::Enumeration::DeviceInformation const& device) const
+    {
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->AddPairingSetMember(*(void**)(&device)));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>**)this;
+            check_hresult(_winrt_abi_type->AddPairingSetMember(*(void**)(&device)));
+        }
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationCustomPairing2<D>::PairingSetMembersRequested(winrt::Windows::Foundation::TypedEventHandler<winrt::Windows::Devices::Enumeration::DeviceInformationCustomPairing, winrt::Windows::Devices::Enumeration::DevicePairingSetMembersRequestedEventArgs> const& handler) const
+    {
+        winrt::event_token token{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->add_PairingSetMembersRequested(*(void**)(&handler), put_abi(token)));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>**)this;
+            check_hresult(_winrt_abi_type->add_PairingSetMembersRequested(*(void**)(&handler), put_abi(token)));
+        }
+        return token;
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationCustomPairing2<D>::PairingSetMembersRequested(auto_revoke_t, winrt::Windows::Foundation::TypedEventHandler<winrt::Windows::Devices::Enumeration::DeviceInformationCustomPairing, winrt::Windows::Devices::Enumeration::DevicePairingSetMembersRequestedEventArgs> const& handler) const
+    {
+        return impl::make_event_revoker<D, PairingSetMembersRequested_revoker>(this, PairingSetMembersRequested(handler));
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationCustomPairing2<D>::PairingSetMembersRequested(winrt::event_token const& token) const noexcept
+    {
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>**)&_winrt_casted_result;
+            _winrt_abi_type->remove_PairingSetMembersRequested(impl::bind_in(token));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>**)this;
+            _winrt_abi_type->remove_PairingSetMembersRequested(impl::bind_in(token));
         }
     }
     template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationPairing<D>::IsPaired() const
@@ -919,6 +1009,60 @@ namespace winrt::impl
         }
         return winrt::Windows::Devices::Enumeration::DeviceWatcher{ watcher, take_ownership_from_abi };
     }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationStatics3<D>::CreateFromIdAsync(param::hstring const& deviceId, param::async_iterable<hstring> const& additionalProperties, winrt::Windows::Devices::Enumeration::DeviceInformationKind const& kind, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const& settings) const
+    {
+        void* operation{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->CreateFromIdAsyncWithAdditionalPropertiesKindAndSettings(*(void**)(&deviceId), *(void**)(&additionalProperties), static_cast<int32_t>(kind), *(void**)(&settings), &operation));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>**)this;
+            check_hresult(_winrt_abi_type->CreateFromIdAsyncWithAdditionalPropertiesKindAndSettings(*(void**)(&deviceId), *(void**)(&additionalProperties), static_cast<int32_t>(kind), *(void**)(&settings), &operation));
+        }
+        return winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Devices::Enumeration::DeviceInformation>{ operation, take_ownership_from_abi };
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationStatics3<D>::FindAllAsync(param::hstring const& aqsFilter, param::async_iterable<hstring> const& additionalProperties, winrt::Windows::Devices::Enumeration::DeviceInformationKind const& kind, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const& settings) const
+    {
+        void* operation{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->FindAllAsyncWithAqsFilterAdditionalPropertiesKindAndSettings(*(void**)(&aqsFilter), *(void**)(&additionalProperties), static_cast<int32_t>(kind), *(void**)(&settings), &operation));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>**)this;
+            check_hresult(_winrt_abi_type->FindAllAsyncWithAqsFilterAdditionalPropertiesKindAndSettings(*(void**)(&aqsFilter), *(void**)(&additionalProperties), static_cast<int32_t>(kind), *(void**)(&settings), &operation));
+        }
+        return winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Devices::Enumeration::DeviceInformationCollection>{ operation, take_ownership_from_abi };
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationStatics3<D>::CreateWatcher(param::hstring const& aqsFilter, param::iterable<hstring> const& additionalProperties, winrt::Windows::Devices::Enumeration::DeviceInformationKind const& kind, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const& settings) const
+    {
+        void* result{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->CreateWatcherWithAqsFilterAdditionalPropertiesKindAndSettings(*(void**)(&aqsFilter), *(void**)(&additionalProperties), static_cast<int32_t>(kind), *(void**)(&settings), &result));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>**)this;
+            check_hresult(_winrt_abi_type->CreateWatcherWithAqsFilterAdditionalPropertiesKindAndSettings(*(void**)(&aqsFilter), *(void**)(&additionalProperties), static_cast<int32_t>(kind), *(void**)(&settings), &result));
+        }
+        return winrt::Windows::Devices::Enumeration::DeviceWatcher{ result, take_ownership_from_abi };
+    }
     template <typename D> auto consume_Windows_Devices_Enumeration_IDeviceInformationUpdate<D>::Id() const
     {
         void* value{};
@@ -1093,6 +1237,22 @@ namespace winrt::impl
             check_hresult(_winrt_abi_type->AcceptWithPasswordCredential(*(void**)(&passwordCredential)));
         }
     }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDevicePairingRequestedEventArgs3<D>::AcceptWithAddress(param::hstring const& address) const
+    {
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs3>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs3, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs3>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->AcceptWithAddress(*(void**)(&address)));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs3>**)this;
+            check_hresult(_winrt_abi_type->AcceptWithAddress(*(void**)(&address)));
+        }
+    }
     template <typename D> auto consume_Windows_Devices_Enumeration_IDevicePairingResult<D>::Status() const
     {
         winrt::Windows::Devices::Enumeration::DevicePairingResultStatus status{};
@@ -1128,6 +1288,60 @@ namespace winrt::impl
             check_hresult(_winrt_abi_type->get_ProtectionLevelUsed(reinterpret_cast<int32_t*>(&value)));
         }
         return value;
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDevicePairingSetMembersRequestedEventArgs<D>::Status() const
+    {
+        winrt::Windows::Devices::Enumeration::DevicePairingAddPairingSetMemberStatus value{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->get_Status(reinterpret_cast<int32_t*>(&value)));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>**)this;
+            check_hresult(_winrt_abi_type->get_Status(reinterpret_cast<int32_t*>(&value)));
+        }
+        return value;
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDevicePairingSetMembersRequestedEventArgs<D>::ParentDeviceInformation() const
+    {
+        void* value{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->get_ParentDeviceInformation(&value));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>**)this;
+            check_hresult(_winrt_abi_type->get_ParentDeviceInformation(&value));
+        }
+        return winrt::Windows::Devices::Enumeration::DeviceInformation{ value, take_ownership_from_abi };
+    }
+    template <typename D> auto consume_Windows_Devices_Enumeration_IDevicePairingSetMembersRequestedEventArgs<D>::PairingSetMembers() const
+    {
+        void* value{};
+        if constexpr (!std::is_same_v<D, winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->get_PairingSetMembers(&value));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>**)this;
+            check_hresult(_winrt_abi_type->get_PairingSetMembers(&value));
+        }
+        return winrt::Windows::Foundation::Collections::IVectorView<winrt::Windows::Devices::Enumeration::DeviceInformation>{ value, take_ownership_from_abi };
     }
     template <typename D> auto consume_Windows_Devices_Enumeration_IDevicePicker<D>::Filter() const
     {
@@ -2138,6 +2352,19 @@ namespace winrt::impl
 #endif
 #ifndef WINRT_LEAN_AND_MEAN
     template <typename D>
+    struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs3> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs3>
+    {
+        int32_t __stdcall get_UserPromptRequired(bool* value) noexcept final try
+        {
+            typename D::abi_guard guard(this->shim());
+            *value = detach_from<bool>(this->shim().UserPromptRequired());
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+    };
+#endif
+#ifndef WINRT_LEAN_AND_MEAN
+    template <typename D>
     struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceAccessInformation> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceAccessInformation>
     {
         int32_t __stdcall add_AccessChanged(void* handler, winrt::event_token* cookie) noexcept final try
@@ -2158,6 +2385,19 @@ namespace winrt::impl
         {
             typename D::abi_guard guard(this->shim());
             *status = detach_from<winrt::Windows::Devices::Enumeration::DeviceAccessStatus>(this->shim().CurrentStatus());
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+    };
+#endif
+#ifndef WINRT_LEAN_AND_MEAN
+    template <typename D>
+    struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceAccessInformation2> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceAccessInformation2>
+    {
+        int32_t __stdcall get_UserPromptRequired(bool* value) noexcept final try
+        {
+            typename D::abi_guard guard(this->shim());
+            *value = detach_from<bool>(this->shim().UserPromptRequired());
             return 0;
         }
         catch (...) { return to_hresult(); }
@@ -2221,6 +2461,10 @@ namespace winrt::impl
         catch (...) { return to_hresult(); }
     };
 #endif
+    template <typename D>
+    struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings>
+    {
+    };
 #ifndef WINRT_LEAN_AND_MEAN
     template <typename D>
     struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceInformation> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceInformation>
@@ -2357,6 +2601,33 @@ namespace winrt::impl
         {
             typename D::abi_guard guard(this->shim());
             this->shim().PairingRequested(*reinterpret_cast<winrt::event_token const*>(&token));
+            return 0;
+        }
+    };
+#endif
+#ifndef WINRT_LEAN_AND_MEAN
+    template <typename D>
+    struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2>
+    {
+        int32_t __stdcall AddPairingSetMember(void* device) noexcept final try
+        {
+            typename D::abi_guard guard(this->shim());
+            this->shim().AddPairingSetMember(*reinterpret_cast<winrt::Windows::Devices::Enumeration::DeviceInformation const*>(&device));
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+        int32_t __stdcall add_PairingSetMembersRequested(void* handler, winrt::event_token* token) noexcept final try
+        {
+            zero_abi<winrt::event_token>(token);
+            typename D::abi_guard guard(this->shim());
+            *token = detach_from<winrt::event_token>(this->shim().PairingSetMembersRequested(*reinterpret_cast<winrt::Windows::Foundation::TypedEventHandler<winrt::Windows::Devices::Enumeration::DeviceInformationCustomPairing, winrt::Windows::Devices::Enumeration::DevicePairingSetMembersRequestedEventArgs> const*>(&handler)));
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+        int32_t __stdcall remove_PairingSetMembersRequested(winrt::event_token token) noexcept final
+        {
+            typename D::abi_guard guard(this->shim());
+            this->shim().PairingSetMembersRequested(*reinterpret_cast<winrt::event_token const*>(&token));
             return 0;
         }
     };
@@ -2586,6 +2857,36 @@ namespace winrt::impl
 #endif
 #ifndef WINRT_LEAN_AND_MEAN
     template <typename D>
+    struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3>
+    {
+        int32_t __stdcall CreateFromIdAsyncWithAdditionalPropertiesKindAndSettings(void* deviceId, void* additionalProperties, int32_t kind, void* settings, void** operation) noexcept final try
+        {
+            clear_abi(operation);
+            typename D::abi_guard guard(this->shim());
+            *operation = detach_from<winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Devices::Enumeration::DeviceInformation>>(this->shim().CreateFromIdAsync(*reinterpret_cast<hstring const*>(&deviceId), *reinterpret_cast<winrt::Windows::Foundation::Collections::IIterable<hstring> const*>(&additionalProperties), *reinterpret_cast<winrt::Windows::Devices::Enumeration::DeviceInformationKind const*>(&kind), *reinterpret_cast<winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const*>(&settings)));
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+        int32_t __stdcall FindAllAsyncWithAqsFilterAdditionalPropertiesKindAndSettings(void* aqsFilter, void* additionalProperties, int32_t kind, void* settings, void** operation) noexcept final try
+        {
+            clear_abi(operation);
+            typename D::abi_guard guard(this->shim());
+            *operation = detach_from<winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Devices::Enumeration::DeviceInformationCollection>>(this->shim().FindAllAsync(*reinterpret_cast<hstring const*>(&aqsFilter), *reinterpret_cast<winrt::Windows::Foundation::Collections::IIterable<hstring> const*>(&additionalProperties), *reinterpret_cast<winrt::Windows::Devices::Enumeration::DeviceInformationKind const*>(&kind), *reinterpret_cast<winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const*>(&settings)));
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+        int32_t __stdcall CreateWatcherWithAqsFilterAdditionalPropertiesKindAndSettings(void* aqsFilter, void* additionalProperties, int32_t kind, void* settings, void** result) noexcept final try
+        {
+            clear_abi(result);
+            typename D::abi_guard guard(this->shim());
+            *result = detach_from<winrt::Windows::Devices::Enumeration::DeviceWatcher>(this->shim().CreateWatcher(*reinterpret_cast<hstring const*>(&aqsFilter), *reinterpret_cast<winrt::Windows::Foundation::Collections::IIterable<hstring> const*>(&additionalProperties), *reinterpret_cast<winrt::Windows::Devices::Enumeration::DeviceInformationKind const*>(&kind), *reinterpret_cast<winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const*>(&settings)));
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+    };
+#endif
+#ifndef WINRT_LEAN_AND_MEAN
+    template <typename D>
     struct produce<D, winrt::Windows::Devices::Enumeration::IDeviceInformationUpdate> : produce_base<D, winrt::Windows::Devices::Enumeration::IDeviceInformationUpdate>
     {
         int32_t __stdcall get_Id(void** value) noexcept final try
@@ -2685,6 +2986,19 @@ namespace winrt::impl
 #endif
 #ifndef WINRT_LEAN_AND_MEAN
     template <typename D>
+    struct produce<D, winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs3> : produce_base<D, winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs3>
+    {
+        int32_t __stdcall AcceptWithAddress(void* address) noexcept final try
+        {
+            typename D::abi_guard guard(this->shim());
+            this->shim().AcceptWithAddress(*reinterpret_cast<hstring const*>(&address));
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+    };
+#endif
+#ifndef WINRT_LEAN_AND_MEAN
+    template <typename D>
     struct produce<D, winrt::Windows::Devices::Enumeration::IDevicePairingResult> : produce_base<D, winrt::Windows::Devices::Enumeration::IDevicePairingResult>
     {
         int32_t __stdcall get_Status(int32_t* status) noexcept final try
@@ -2698,6 +3012,35 @@ namespace winrt::impl
         {
             typename D::abi_guard guard(this->shim());
             *value = detach_from<winrt::Windows::Devices::Enumeration::DevicePairingProtectionLevel>(this->shim().ProtectionLevelUsed());
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+    };
+#endif
+#ifndef WINRT_LEAN_AND_MEAN
+    template <typename D>
+    struct produce<D, winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs> : produce_base<D, winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs>
+    {
+        int32_t __stdcall get_Status(int32_t* value) noexcept final try
+        {
+            typename D::abi_guard guard(this->shim());
+            *value = detach_from<winrt::Windows::Devices::Enumeration::DevicePairingAddPairingSetMemberStatus>(this->shim().Status());
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+        int32_t __stdcall get_ParentDeviceInformation(void** value) noexcept final try
+        {
+            clear_abi(value);
+            typename D::abi_guard guard(this->shim());
+            *value = detach_from<winrt::Windows::Devices::Enumeration::DeviceInformation>(this->shim().ParentDeviceInformation());
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+        int32_t __stdcall get_PairingSetMembers(void** value) noexcept final try
+        {
+            clear_abi(value);
+            typename D::abi_guard guard(this->shim());
+            *value = detach_from<winrt::Windows::Foundation::Collections::IVectorView<winrt::Windows::Devices::Enumeration::DeviceInformation>>(this->shim().PairingSetMembers());
             return 0;
         }
         catch (...) { return to_hresult(); }
@@ -3310,6 +3653,18 @@ WINRT_EXPORT namespace winrt::Windows::Devices::Enumeration
     {
         return impl::call_factory<DeviceInformation, IDeviceInformationStatics2>([&](IDeviceInformationStatics2 const& f) { return f.CreateWatcher(aqsFilter, additionalProperties, kind); });
     }
+    inline auto DeviceInformation::CreateFromIdAsync(param::hstring const& deviceId, param::async_iterable<hstring> const& additionalProperties, winrt::Windows::Devices::Enumeration::DeviceInformationKind const& kind, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const& settings)
+    {
+        return impl::call_factory<DeviceInformation, IDeviceInformationStatics3>([&](IDeviceInformationStatics3 const& f) { return f.CreateFromIdAsync(deviceId, additionalProperties, kind, settings); });
+    }
+    inline auto DeviceInformation::FindAllAsync(param::hstring const& aqsFilter, param::async_iterable<hstring> const& additionalProperties, winrt::Windows::Devices::Enumeration::DeviceInformationKind const& kind, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const& settings)
+    {
+        return impl::call_factory<DeviceInformation, IDeviceInformationStatics3>([&](IDeviceInformationStatics3 const& f) { return f.FindAllAsync(aqsFilter, additionalProperties, kind, settings); });
+    }
+    inline auto DeviceInformation::CreateWatcher(param::hstring const& aqsFilter, param::iterable<hstring> const& additionalProperties, winrt::Windows::Devices::Enumeration::DeviceInformationKind const& kind, winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings const& settings)
+    {
+        return impl::call_factory<DeviceInformation, IDeviceInformationStatics3>([&](IDeviceInformationStatics3 const& f) { return f.CreateWatcher(aqsFilter, additionalProperties, kind, settings); });
+    }
     inline auto DeviceInformationPairing::TryRegisterForAllInboundPairingRequests(winrt::Windows::Devices::Enumeration::DevicePairingKinds const& pairingKindsSupported)
     {
         return impl::call_factory<DeviceInformationPairing, IDeviceInformationPairingStatics>([&](IDeviceInformationPairingStatics const& f) { return f.TryRegisterForAllInboundPairingRequests(pairingKindsSupported); });
@@ -3328,24 +3683,31 @@ namespace std
 #ifndef WINRT_LEAN_AND_MEAN
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs2> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceAccessChangedEventArgs3> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceAccessInformation> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceAccessInformation2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceAccessInformationStatics> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceConnectionChangeTriggerDetails> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceDisconnectButtonClickedEventArgs> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceEnumerationSettings> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformation> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformation2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationCustomPairing2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationPairing> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationPairing2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationPairingStatics> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationPairingStatics2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics2> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationStatics3> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationUpdate> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDeviceInformationUpdate2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs2> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs3> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePairingResult> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePairingSetMembersRequestedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePairingSettings> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePicker> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::IDevicePickerAppearance> : winrt::impl::hash_base {};
@@ -3369,6 +3731,7 @@ namespace std
     template<> struct hash<winrt::Windows::Devices::Enumeration::DeviceInformationUpdate> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::DevicePairingRequestedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::DevicePairingResult> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Windows::Devices::Enumeration::DevicePairingSetMembersRequestedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::DevicePicker> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::DevicePickerAppearance> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Windows::Devices::Enumeration::DevicePickerFilter> : winrt::impl::hash_base {};

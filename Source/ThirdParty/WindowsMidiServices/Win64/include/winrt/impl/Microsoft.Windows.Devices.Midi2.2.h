@@ -212,7 +212,7 @@ WINRT_EXPORT namespace winrt::Microsoft::Windows::Devices::Midi2
         static auto NormalizeFullId(param::hstring const& fullEndpointDeviceId);
     };
     struct WINRT_IMPL_EMPTY_BASES MidiEndpointDeviceInformation : winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation,
-        impl::require<MidiEndpointDeviceInformation, winrt::Windows::Foundation::IStringable>
+        impl::require<MidiEndpointDeviceInformation, winrt::Windows::Foundation::IStringable, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2>
     {
         MidiEndpointDeviceInformation(std::nullptr_t) noexcept {}
         MidiEndpointDeviceInformation(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation(ptr, take_ownership_from_abi) {}

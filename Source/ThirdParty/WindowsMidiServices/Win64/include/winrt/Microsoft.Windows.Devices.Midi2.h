@@ -1824,6 +1824,24 @@ namespace winrt::impl
         }
         return value;
     }
+    template <typename D> auto consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDeviceInformation2<D>::IsMuted() const
+    {
+        bool value{};
+        if constexpr (!std::is_same_v<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2>)
+        {
+            winrt::hresult _winrt_cast_result_code;
+            auto const _winrt_casted_result = impl::try_as_with_reason<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2, D const*>(static_cast<D const*>(this), _winrt_cast_result_code);
+            check_hresult(_winrt_cast_result_code);
+            auto const _winrt_abi_type = *(abi_t<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2>**)&_winrt_casted_result;
+            check_hresult(_winrt_abi_type->get_IsMuted(&value));
+        }
+        else
+        {
+            auto const _winrt_abi_type = *(abi_t<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2>**)this;
+            check_hresult(_winrt_abi_type->get_IsMuted(&value));
+        }
+        return value;
+    }
     template <typename D> auto consume_Microsoft_Windows_Devices_Midi2_IMidiEndpointDeviceInformationAddedEventArgs<D>::AddedDevice() const
     {
         void* value{};
@@ -6014,6 +6032,17 @@ namespace winrt::impl
         catch (...) { return to_hresult(); }
     };
 #endif
+    template <typename D>
+    struct produce<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2> : produce_base<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2>
+    {
+        int32_t __stdcall get_IsMuted(bool* value) noexcept final try
+        {
+            typename D::abi_guard guard(this->shim());
+            *value = detach_from<bool>(this->shim().IsMuted());
+            return 0;
+        }
+        catch (...) { return to_hresult(); }
+    };
 #ifndef WINRT_LEAN_AND_MEAN
     template <typename D>
     struct produce<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationAddedEventArgs> : produce_base<D, winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationAddedEventArgs>
@@ -8193,6 +8222,7 @@ namespace std
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointConnectionStatics> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceIdHelperStatics> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation> : winrt::impl::hash_base {};
+    template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformation2> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationAddedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationRemovedEventArgs> : winrt::impl::hash_base {};
     template<> struct hash<winrt::Microsoft::Windows::Devices::Midi2::IMidiEndpointDeviceInformationStatics> : winrt::impl::hash_base {};
