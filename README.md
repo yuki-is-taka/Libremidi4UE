@@ -1,6 +1,6 @@
 # Libremidi4UE
 
-An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/libremidi) (v5.4.2), providing cross-platform MIDI 1.0 and MIDI 2.0 (UMP) support with hotplug device discovery.
+An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/libremidi) (v5.4.3), providing cross-platform MIDI 1.0 and MIDI 2.0 (UMP) support with hotplug device discovery.
 
 ## Features
 
@@ -90,6 +90,78 @@ ULibremidiSettings (UDeveloperSettings)
 | `FLibremidiUmpMessage` | MIDI 2.0 UMP message wrapper |
 | `FLibremidiInputInfo` / `FLibremidiOutputInfo` | Port metadata with identification |
 | `ULibremidiInput` / `ULibremidiOutput` | MIDI I/O objects with delegates |
+
+## Port Identifiers and Device Grouping
+
+Each `FLibremidiInputInfo` / `FLibremidiOutputInfo` carries a set of identifiers sourced from the host MIDI API. On top of what libremidi exposes in C++, this plugin serializes all identifier fields as `UPROPERTY`s, making them accessible from Blueprint and enabling device-level grouping across the input/output boundary.
+
+### Identifier fields
+
+| Field | Type | What it represents |
+|-------|------|-------------------|
+| `ContainerId` | UUID / string / integer / none | Physical device container. **Ports on the same device share a `ContainerId`**, regardless of whether they are inputs or outputs. |
+| `DeviceId` | string / integer / USB VID+PID / none | Endpoint- or device-level identifier within the container |
+| `PortHandle` | `int64` | API-internal port reference. Encoding is platform-specific (see below). Do not compare across platforms. |
+| `ClientHandle` | `int64` | API-internal client reference. Session-scoped; never persist this value. |
+| `Serial` | `FString` | Manufacturer-supplied serial number. Theoretically the strongest persistent identifier, but virtually no MIDI device exposes one — expect this to be empty in practice. |
+| `Ordinal` | `int32` | Per-device port index for stable ordering. Computed from API-specific logic (CoreMIDI entity index, WinMIDI terminal block number, ALSA subdevice number, etc.). |
+
+### Identifier persistence by platform
+
+Persistence has three levels:
+
+| Level | Meaning |
+|-------|---------|
+| **True** | Survives replug to any port, reboot, and new sessions |
+| **Partial** | Stable while plugged into the **same physical USB port**; breaks if the device is moved |
+| **Session** | Valid only while the device stays connected; changes on replug |
+| **None / type-level** | May change at any time, or identifies the device model rather than the individual unit |
+
+| Field | Windows MIDI Services | WinMM | macOS (CoreMIDI) | ALSA |
+|-------|-----------------------|-------|------------------|------|
+| **`ContainerId`** | ContainerID GUID — **Partial** (Windows may re-enumerate on replug) | *(not provided)* | USBLocationID — **Partial** (USB port position) | udev `ID_PATH` — **Partial** (USB bus path; stable across reboots on same port) |
+| **`DeviceId`** | EndpointDeviceId string — **Session** (changes on reboot) | MIDI caps VID:PID — **type-level only**¹ | USBVendorProduct — **type-level only**¹ | udev sysfs path — **Partial / unstable**² |
+| **`PortHandle`** | TerminalBlockNumber — **True** (hardware-defined, 1-based) | Port index — **None** (enumeration order, changes on hotplug) | MIDIUniqueID — **Session** (CoreMIDI issues a new ID on every reconnect) | Packed card/device/subdevice — **None** (card numbers are dynamically assigned) |
+| **`Serial`** | SerialNumber — **True**³ | *(not provided)* | *(not provided)* | udev `ID_SERIAL` — **True** (if present) |
+
+> ¹ VID:PID identifies the device model, not the individual unit. Two identical devices have the same value.
+>
+> ² The sysfs path includes a USB device number that can be reassigned on reboot, even for the same physical port.
+>
+> ³ libremidi reads `SerialNumber` (Windows MIDI Services) and udev `ID_SERIAL` (ALSA) when available, but per libremidi's own documentation, virtually no MIDI device manufacturer implements a per-unit serial number. In practice this field is almost always empty.
+
+**Bottom line:** The only configuration that guarantees true per-unit persistent identification is **Windows MIDI Services with a MIDI 2.0 device that exposes a serial number**. Every other platform provides at best partial, port-location-based persistence.
+
+### Grouping ports by physical device
+
+Ports that belong to the same physical device share the same `ContainerId`. This means you can cross-reference `GetInputPorts()` and `GetOutputPorts()` to find, for example, the output port that pairs with a given input — including across the input/output boundary. No dedicated API exists for this; grouping requires comparing `ContainerId` values manually (checking `Type` and the relevant field: `UUIDBytes`, `String`, or `Integer`).
+
+> **Note:** `ContainerId` is absent (`Type == None`) on WinMM and most virtual/software ports.
+
+### Reconnection: FindClosestPort
+
+When a device disconnects and reconnects, its identifiers may change (see table above). `FLibremidiPortInfo::FindClosestPort` uses a weighted heuristic to find the best candidate in a new port list. This wraps `libremidi::find_closest_port` with full UPROPERTY-serialized inputs, making saved port state usable across sessions.
+
+| Priority | Field(s) | Hit / Miss |
+|----------|----------|------------|
+| 1 | `ContainerId` + `DeviceId` | +1000 / −2000 |
+| 2 | `Serial` | +800 / −1000 |
+| 3 | `DisplayName`, `PortName`, `DeviceName` | up to +400 each (Levenshtein similarity ≥ 0.5) |
+| 4 | `Manufacturer`, `Product` | +100 / −2000 |
+| 5 | `PortHandle` | +50 (tie-break only) |
+
+A result with `Score ≤ 0` or `!IsValid()` means no match was found. Ports from a different API never match.
+
+```cpp
+// After a hotplug event, re-match a previously saved port
+FLibremidiPortInfo::FMatchResult Result = SavedPortInfo.FindClosestPort(
+    TArrayView<const FLibremidiPortInfo>(NewInputPorts));
+
+if (Result.IsValid())
+{
+    MidiIn->OpenInput(NewInputPorts[Result.Index]);
+}
+```
 
 ## Platform backends
 
