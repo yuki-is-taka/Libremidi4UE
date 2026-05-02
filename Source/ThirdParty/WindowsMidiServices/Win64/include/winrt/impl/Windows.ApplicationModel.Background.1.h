@@ -21,35 +21,6 @@ WINRT_EXPORT namespace winrt::Windows::ApplicationModel::Background
         IActivitySensorTriggerFactory(std::nullptr_t = nullptr) noexcept {}
         IActivitySensorTriggerFactory(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Windows::Foundation::IInspectable(ptr, take_ownership_from_abi) {}
     };
-    struct WINRT_IMPL_EMPTY_BASES IAlarmApplicationManagerStatics :
-        winrt::Windows::Foundation::IInspectable,
-        impl::consume_t<IAlarmApplicationManagerStatics>
-    {
-        IAlarmApplicationManagerStatics(std::nullptr_t = nullptr) noexcept {}
-        IAlarmApplicationManagerStatics(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Windows::Foundation::IInspectable(ptr, take_ownership_from_abi) {}
-    };
-    struct WINRT_IMPL_EMPTY_BASES IAppBroadcastTrigger :
-        winrt::Windows::Foundation::IInspectable,
-        impl::consume_t<IAppBroadcastTrigger>,
-        impl::require<winrt::Windows::ApplicationModel::Background::IAppBroadcastTrigger, winrt::Windows::ApplicationModel::Background::IBackgroundTrigger>
-    {
-        IAppBroadcastTrigger(std::nullptr_t = nullptr) noexcept {}
-        IAppBroadcastTrigger(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Windows::Foundation::IInspectable(ptr, take_ownership_from_abi) {}
-    };
-    struct WINRT_IMPL_EMPTY_BASES IAppBroadcastTriggerFactory :
-        winrt::Windows::Foundation::IInspectable,
-        impl::consume_t<IAppBroadcastTriggerFactory>
-    {
-        IAppBroadcastTriggerFactory(std::nullptr_t = nullptr) noexcept {}
-        IAppBroadcastTriggerFactory(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Windows::Foundation::IInspectable(ptr, take_ownership_from_abi) {}
-    };
-    struct WINRT_IMPL_EMPTY_BASES IAppBroadcastTriggerProviderInfo :
-        winrt::Windows::Foundation::IInspectable,
-        impl::consume_t<IAppBroadcastTriggerProviderInfo>
-    {
-        IAppBroadcastTriggerProviderInfo(std::nullptr_t = nullptr) noexcept {}
-        IAppBroadcastTriggerProviderInfo(void* ptr, take_ownership_from_abi_t) noexcept : winrt::Windows::Foundation::IInspectable(ptr, take_ownership_from_abi) {}
-    };
     struct WINRT_IMPL_EMPTY_BASES IApplicationTrigger :
         winrt::Windows::Foundation::IInspectable,
         impl::consume_t<IApplicationTrigger>,

@@ -30,6 +30,12 @@ WindowsMidiServices/
 included. The full Windows SDK C++/WinRT projection is not bundled — all headers here were
 generated with `cppwinrt.exe v2.0.250303.1` and must be kept as a matched set.
 
+**Bundled SDK version**: Windows MIDI Services NuGet `1.0.17-rc.4.25` (rc-4, 2026-04-12).
+See `Win64/include/winmidi/init/WindowsMidiServicesVersion.h` for the authoritative version
+record. End-user machines must have the matching SDK Runtime installed
+(`Windows.MIDI.Services.SDK.Runtime.and.Tools.1.0.17-rc.4.25-x64.exe`) — the runtime DLL is
+not bundled.
+
 ## Usage
 
 The WindowsMidiServices module is automatically included when building on Windows x64 platforms.
