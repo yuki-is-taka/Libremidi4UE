@@ -59,6 +59,34 @@ If you need to update the MIDI Services SDK headers:
 4. **Important**: All headers (including `base.h` and `Windows.*.h` dependencies) must come
    from the same `cppwinrt.exe` invocation to avoid version mismatches
 
+### Extending the projection when bumping libremidi
+
+Because this is a **minimal, hand-trimmed subset** (see the Note above), bumping the
+libremidi submodule to a version whose `winmidi` backend uses a Windows MIDI Services
+namespace that is not yet bundled will fail to compile with errors like
+`'X': namespace does not exist` or `'Type' is not a member of
+winrt::Microsoft::Windows::Devices::Midi2` — **even though the bundled SDK is current**.
+The SDK does not need bumping; the *projection subset* needs extending.
+
+To extend it (no SDK version change):
+
+1. Find the winrt headers the new libremidi actually includes:
+   `grep -rh '#include <winrt/' <submodule>/include/libremidi/backends/winmidi/`
+2. Regenerate the MIDI2 namespaces with the **matching** cppwinrt version
+   (`v2.0.250303.1`, must equal the `base.h` banner) and the rc-4 winmd:
+   `cppwinrt.exe -input "<...>/Microsoft.Windows.Devices.Midi2.winmd" -ref 10.0.22621.0 -output <tmp>`
+   (`-ref` references — does not regenerate — the Windows SDK, so keep the existing
+   `Windows.*.h` + `base.h` as-is).
+3. Copy only the Midi2-namespace files in the `#include` closure of the headers from
+   step 1 into `Win64/include/winrt/` (public + matching `impl/*.0/1/2.h`).
+4. If the closure pulls a **new** `Windows.*` dependency (e.g. `Windows.Data.Json`,
+   required by the JSON-based `ServiceConfig` that `Endpoints.Virtual` depends on),
+   generate it too: `cppwinrt.exe -input 10.0.22621.0 -include Windows.Data.Json -output <tmp>`.
+5. Verify the bundle is self-contained (no dangling `#include "winrt/..."` paths).
+
+History: the `Endpoints.Virtual`, `ServiceConfig`, and `Windows.Data.Json` headers were
+added this way for libremidi's winmidi virtual-port support (#194).
+
 ## License
 
 Windows MIDI Services is licensed under the MIT License. See `Licenses/LICENSE.txt` for details.
