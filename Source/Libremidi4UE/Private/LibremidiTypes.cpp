@@ -4,7 +4,11 @@
 #include "LibremidiTypes.h"
 
 #if PLATFORM_MAC
+// UE 5.8: shadow Carbon's vestigial `struct FVector` (pulled in via CoreMIDI -> CoreServices ->
+// CarbonCore) so it doesn't clash with UE's FVector type alias. See LibremidiEngineSubsystem.h.
+#define FVector FVector_CarbonShadow_DoNotUse
 #include <CoreMIDI/CoreMIDI.h>
+#undef FVector
 #endif
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,17 @@
 #include "LibremidiTypes.h"
 
 THIRD_PARTY_INCLUDES_START
+#if defined(__APPLE__)
+// UE 5.8: Carbon's NumberFormatting.h (pulled in transitively by CoreMIDI -> CoreServices ->
+// CarbonCore) defines a vestigial `struct FVector` that collides with UE's FVector type alias.
+// libremidi/CoreMIDI never reference Carbon's FVector, so shadow the symbol for the duration of
+// the libremidi include only, then restore it.
+#define FVector FVector_CarbonShadow_DoNotUse
+#endif
 #include <libremidi/libremidi.hpp>
+#if defined(__APPLE__)
+#undef FVector
+#endif
 THIRD_PARTY_INCLUDES_END
 
 #include "LibremidiEngineSubsystem.generated.h"

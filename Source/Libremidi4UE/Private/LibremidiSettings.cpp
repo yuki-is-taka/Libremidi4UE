@@ -4,7 +4,13 @@
 #include "LibremidiSettings.h"
 
 THIRD_PARTY_INCLUDES_START
+#if defined(__APPLE__) // see LibremidiEngineSubsystem.h: shadow Carbon's FVector during libremidi include (UE 5.8)
+#define FVector FVector_CarbonShadow_DoNotUse
+#endif
 #include <libremidi/libremidi.hpp>
+#if defined(__APPLE__)
+#undef FVector
+#endif
 THIRD_PARTY_INCLUDES_END
 
 ULibremidiSettings::ULibremidiSettings(const FObjectInitializer& ObjectInitializer)
