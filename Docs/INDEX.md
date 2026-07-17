@@ -17,7 +17,7 @@ Read this first; it routes to every doc below. The authoritative API spec is the
 ## Decisions (immutable)
 | ADR | Status | Decision |
 |---|---|---|
-| _(none yet)_ | | |
+| [adr-0001](decisions/adr-0001-libremidi-submodule-tracks-upstream.md) | accepted | libremidi submodule tracks `celtera/libremidi` directly; fork retired once its winmidi patch merged upstream |
 
 ## Design / WIP
 | Doc | Status | Open when |

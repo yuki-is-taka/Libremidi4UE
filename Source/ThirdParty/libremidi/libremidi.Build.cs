@@ -1,10 +1,5 @@
 // Copyright (c) 2025-2026, YUKI TAKA. All rights reserved.
 // Licensed under the BSD 2-Clause License. See LICENSE file for details.
-//
-// IMPORTANT: libremidi requires manual patching after submodule update.
-// File: libremidi/include/libremidi/backends/winmidi/helpers.hpp
-// Fix: Remove duplicate "using namespace Windows::Devices::Enumeration;" (without winrt:: prefix)
-// The line with "winrt::Windows::Devices::Enumeration" should remain.
 
 using System.IO;
 using UnrealBuildTool;
