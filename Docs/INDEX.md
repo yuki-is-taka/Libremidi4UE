@@ -22,4 +22,7 @@ Read this first; it routes to every doc below. The authoritative API spec is the
 ## Design / WIP
 | Doc | Status | Open when |
 |---|---|---|
-| _(none yet)_ | | |
+| [wip-winmidi-inbox-migration.md](wip-winmidi-inbox-migration.md) | investigation | before touching Windows MIDI port identity/enumeration; before executing the in-box migration + winmidi-fork batch |
+
+## Backlog
+Open future work + deferrals: [`Docs/backlog.md`](backlog.md) — this unit's single TODO ledger.
