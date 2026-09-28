@@ -200,7 +200,16 @@ Both directions open exactly one `MidiEndpointConnection` per port: `midi_in.hpp
 same call — confirmed exactly at both lines. The porting guide recommends one ref-counted
 connection per **endpoint** (shared across the endpoint's blocks/groups) instead. Not a
 correctness bug today (each port already gets its own connection), just diverges from
-Microsoft's recommended pattern — lowest priority of the eight.
+Microsoft's recommended pattern — lowest priority of the nine.
+
+**i. `to_ns()` returns raw QPC ticks, not nanoseconds, despite the timestamp being documented
+(and consumed) as ns.** `midi_in.hpp:208`/`:237` (`process_message`, both the non-COM and COM
+raw-callback overloads) — confirmed exactly at these lines, present on `origin/master` as well as
+the pinned submodule commit. Every other backend examined does an explicit tick/tick-domain → ns
+conversion in its own `to_ns()`; winmidi is the only one that returns the raw device value
+unconverted. Worked around wrapper-side for now (Libremidi4UE ADR-0002); should be fixed here, in
+the batched fork work, alongside defects (a)-(h), and the wrapper-side correction removed in the
+same change once the fix lands in the pinned submodule commit.
 
 ## 5. Open decisions for the owner
 

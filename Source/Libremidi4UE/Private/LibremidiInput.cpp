@@ -5,6 +5,18 @@
 #include "Libremidi4UELog.h"
 #include "LibremidiEngineSubsystem.h"
 #include "LibremidiMessage.h"
+#include "LibremidiTimestampConversion.h"
+
+#if PLATFORM_WINDOWS
+// Deliberately NOT routed through Windows/AllowWindowsPlatformTypes.h: that wrapper pulls in
+// Windows/MinWindows.h, which unconditionally (re)defines WIN32_LEAN_AND_MEAN/NOMINMAX with no
+// #ifndef guard — colliding (C4005) with libremidi's own winmm/error_domain.hpp and config.hpp,
+// which define the same macros with different token text and are already active in this TU via
+// LibremidiInput.h's THIRD_PARTY_INCLUDES block above. A raw <Windows.h> here is a no-op (the real
+// windows.h's own include guard skips it) since libremidi already pulled it in first; it just makes
+// the LARGE_INTEGER / QueryPerformanceFrequency / QueryPerformanceCounter dependency below explicit.
+#include <Windows.h>
+#endif
 
 THIRD_PARTY_INCLUDES_START
 #if defined(__APPLE__) // see LibremidiEngineSubsystem.h: shadow Carbon's FVector during libremidi include (UE 5.8)
@@ -112,6 +124,9 @@ bool ULibremidiInput::Initialize(
 		{
 			HandleUmpRawData(Data, Timestamp);
 		};
+		// Identity transform — the Custom-mode tick correction (HandleMessage/HandleUmpMessage,
+		// Libremidi4UE ADR-0002) assumes this identity; if it ever transforms, move the correction before
+		// it or drop Custom.
 		Config.get_timestamp = [](libremidi::timestamp Timestamp) { return Timestamp; };
 		Config.on_error = [this](std::string_view ErrorText, const libremidi::source_location& Location)
 		{
@@ -138,6 +153,9 @@ bool ULibremidiInput::Initialize(
 		{
 			HandleRawData(Data, Timestamp);
 		};
+		// Identity transform — same Custom-mode assumption as the MIDI2 config above (Libremidi4UE
+		// ADR-0002): the Custom-mode tick correction assumes this identity; if it ever transforms, move
+		// the correction before it or drop Custom.
 		Config.get_timestamp = [](libremidi::timestamp Timestamp) { return Timestamp; };
 		Config.on_error = [this](std::string_view ErrorText, const libremidi::source_location& Location)
 		{
@@ -154,6 +172,29 @@ bool ULibremidiInput::Initialize(
 
 		MidiIn = MakeUnique<libremidi::midi_in>(Config, ApiConfig);
 		UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiInput created MIDI1 input."));
+	}
+
+	// winmidi raw-tick timestamp correction (Libremidi4UE ADR-0002): snapshot the API this MidiIn
+	// actually resolved to and the timestamp_mode baked into its Config, both as of construction —
+	// covers the Midi2/UMP and Midi1 branches above, which converge here.
+	if (MidiIn.IsValid())
+	{
+		ActiveApi = MidiIn->get_current_api();
+		ActiveTimestampMode = TimestampMode; // snapshot — the value actually baked into Config above
+#if PLATFORM_WINDOWS
+		if (ActiveApi == libremidi::API::WINDOWS_MIDI_SERVICES)
+		{
+			LARGE_INTEGER Freq;
+			CachedQpcFrequency = ::QueryPerformanceFrequency(&Freq) ? static_cast<uint64>(Freq.QuadPart) : 0;
+			if (CachedQpcFrequency == 0)
+			{
+				UE_LOG(LogLibremidi4UE, Error,
+					TEXT("LibremidiInput Initialize: QueryPerformanceFrequency failed — winmidi timestamp ")
+					TEXT("correction disabled, timestamps will read as raw ticks."));
+			}
+		}
+		bTimestampCrossCheckLogged = false;
+#endif
 	}
 
 	return MidiIn.IsValid();
@@ -305,6 +346,24 @@ void ULibremidiInput::SetMidi1ChannelEventsToMidi2(bool bEnabled)
 
 void ULibremidiInput::HandleMessage(libremidi::message&& Message)
 {
+#if PLATFORM_WINDOWS
+	if (Libremidi4UE::NeedsWinmidiTickCorrection(ActiveApi, ActiveTimestampMode))
+	{
+		// For Custom mode this assumes Config.get_timestamp is the identity transform (see its lambda in
+		// Initialize) — the Custom-mode tick correction assumes this identity; if it ever transforms,
+		// move the correction before it or drop Custom.
+		Message.timestamp = Libremidi4UE::ConvertTicksToNs(Message.timestamp, CachedQpcFrequency);
+
+		// Cross-check only for Absolute/Custom — Relative's first message is always 0 and every
+		// later one is a tick-delta, not a wall-clock instant, so comparing it against QPC-now would
+		// fail every time and would not be a meaningful check (Libremidi4UE ADR-0002).
+		if (ActiveTimestampMode == libremidi::timestamp_mode::Absolute
+			|| ActiveTimestampMode == libremidi::timestamp_mode::Custom)
+		{
+			RunTimestampCrossCheckOnce(Message.timestamp);
+		}
+	}
+#endif
 	FLibremidiMidi1Message Wrapped(MoveTemp(Message));
 	OnMidi1Message.Broadcast(this, Wrapped);
 }
@@ -313,10 +372,27 @@ void ULibremidiInput::HandleRawData(std::span<const uint8_t> Data, libremidi::ti
 {
 	// Raw callback path — not using on_message packetization.
 	// Currently unused; available for future direct-byte consumers.
+	// If this path is ever activated, apply the winmidi tick correction (Libremidi4UE ADR-0002) here
+	// too — Timestamp carries the same raw-tick value HandleMessage/HandleUmpMessage correct below.
 }
 
 void ULibremidiInput::HandleUmpMessage(libremidi::ump&& Message)
 {
+#if PLATFORM_WINDOWS
+	if (Libremidi4UE::NeedsWinmidiTickCorrection(ActiveApi, ActiveTimestampMode))
+	{
+		Message.timestamp = Libremidi4UE::ConvertTicksToNs(Message.timestamp, CachedQpcFrequency);
+
+		// Cross-check only for Absolute/Custom — see the identical comment in HandleMessage
+		// (Libremidi4UE ADR-0002).
+		if (ActiveTimestampMode == libremidi::timestamp_mode::Absolute
+			|| ActiveTimestampMode == libremidi::timestamp_mode::Custom)
+		{
+			RunTimestampCrossCheckOnce(Message.timestamp);
+		}
+	}
+#endif
+
 	const uint8 MT = static_cast<uint8>((Message.data[0] >> 28) & 0x0F);
 	UE_LOG(LogLibremidi4UE, Verbose,
 		TEXT("HandleUmpMessage: MT=0x%X Word0=0x%08X port='%s'"),
@@ -331,6 +407,8 @@ void ULibremidiInput::HandleUmpRawData(std::span<const uint32_t> Data, libremidi
 	UE_LOG(LogLibremidi4UE, Verbose,
 		TEXT("HandleUmpRawData: words=%d port='%s'"),
 		static_cast<int32>(Data.size()), *GetName());
+	// If this path is ever activated, apply the winmidi tick correction (Libremidi4UE ADR-0002) here
+	// too — Timestamp carries the same raw-tick value HandleMessage/HandleUmpMessage correct above.
 }
 
 void ULibremidiInput::HandleError(std::string_view ErrorText, const libremidi::source_location& Location)
@@ -352,3 +430,39 @@ void ULibremidiInput::HandleWarning(std::string_view WarningText, const libremid
 	UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiInput Warning: %s"), *Text);
 	OnWarning.Broadcast(this, Text);
 }
+
+#if PLATFORM_WINDOWS
+void ULibremidiInput::RunTimestampCrossCheckOnce(int64 ConvertedTimestampNs)
+{
+	if (CachedQpcFrequency == 0)
+	{
+		return;
+	}
+	// Atomic exchange, not a read-then-write on a bool: the WMS callback this runs from is not
+	// guaranteed single-threaded, and a plain bool here would let two callbacks racing on the flag
+	// both pass the check and both log.
+	if (bTimestampCrossCheckLogged.exchange(true))
+	{
+		return; // another call already claimed the one-shot log
+	}
+
+	LARGE_INTEGER NowTicks;
+	if (!::QueryPerformanceCounter(&NowTicks))
+	{
+		return; // can't cross-check; not itself an error
+	}
+	const int64 NowNs = Libremidi4UE::ConvertTicksToNs(NowTicks.QuadPart, CachedQpcFrequency);
+	const int64 DiffNs = FMath::Abs(NowNs - ConvertedTimestampNs);
+	constexpr int64 ToleranceNs = 5LL * 1'000'000'000LL; // a few seconds — generous vs. callback latency
+	if (DiffNs > ToleranceNs)
+	{
+		UE_LOG(LogLibremidi4UE, Error,
+			TEXT("LibremidiInput: winmidi timestamp cross-check failed (converted=%lld ns, ")
+			TEXT("QPC-now=%lld ns, diff=%lld ns). This wrapper-side tick->ns correction ")
+			TEXT("(Libremidi4UE ADR-0002) may now be double-converting an already-fixed upstream ")
+			TEXT("value, or the tick base assumption no longer holds. Re-verify against ")
+			TEXT("origin/master's winmidi backend before trusting MIDI timestamps."),
+			ConvertedTimestampNs, NowNs, DiffNs);
+	}
+}
+#endif

@@ -18,6 +18,7 @@ Read this first; it routes to every doc below. The authoritative API spec is the
 | ADR | Status | Decision |
 |---|---|---|
 | [adr-0001](decisions/adr-0001-libremidi-submodule-tracks-upstream.md) | accepted | libremidi submodule tracks `celtera/libremidi` directly; fork retired once its winmidi patch merged upstream |
+| [adr-0002](decisions/adr-0002-winmidi-timestamp-tick-correction.md) | accepted | winmidi's raw-tick timestamp is corrected to true ns inside the Libremidi4UE wrapper, keyed on API + mode |
 
 ## Design / WIP
 | Doc | Status | Open when |

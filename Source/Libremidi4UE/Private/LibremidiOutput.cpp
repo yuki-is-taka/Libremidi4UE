@@ -87,6 +87,9 @@ bool ULibremidiOutput::Initialize(ELibremidiMidiProtocol Protocol, ELibremidiTim
 	{
 		HandleWarning(WarningText, Location);
 	};
+	// Inert today: output_configuration::timestamps documents itself as feeding schedule_message(),
+	// which ULibremidiOutput never calls (only send_message(), which takes no timestamp) — see
+	// Libremidi4UE ADR-0002. Set for parity with the input side / future schedule_message use only.
 	Config.timestamps = TimestampMode;
 
 	MidiOut = MakeUnique<libremidi::midi_out>(Config, ApiConfig);
