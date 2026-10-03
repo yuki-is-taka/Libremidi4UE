@@ -68,6 +68,7 @@ in-box migration, where the code is rewritten anyway). Unit details: [design §7
 | Item (what + why) | State | Design |
 |---|---|---|
 | **Version the winmidi probe harness** under `Tools/WinmidiProbe` — the probe source, its stage / build / run scripts and the pass-criteria table that [adr-0003](decisions/adr-0003-libremidi-fork-strategy.md), [adr-0005](decisions/adr-0005-winmidi-input-group-addressing.md) and the design doc cite. It is kept outside this repository today, so the cited rows cannot be rerun from a clone. Scrub before committing: user paths, machine names, endpoint instance ids; raw logs stay out. Trigger: after the checkpoint-A verification run, and before the first upstream PR that cites probe evidence. The first half of the trigger was reached on 2026-10-03 ([cpA probe](audit-winmidi-probe-cpA-2026-10-03.md); two scenarios added, `send-wms-live-g1` and `recv-wms-midi1`) | idea | [design §5](design-winmidi-ump-fixes.md), [probe record](audit-winmidi-probe-2026-10-03.md) |
+| **Physical-input check on Windows: CC and encoder bursts** — the remaining open item of the physical-input checks (the SysEx-stream device check is done, see [audit-winmidi-probe-erae-2026-10-03](audit-winmidi-probe-erae-2026-10-03.md)). A burst of CC / relative-encoder messages from a real device should arrive complete and in order through the fixed backend; it needs a person at the device. | idea | [design-winmidi-ump-fixes §5](design-winmidi-ump-fixes.md) |
 
 ### Outside the UMP-only scope — recorded for later (owner decision 2026-10-03)
 
