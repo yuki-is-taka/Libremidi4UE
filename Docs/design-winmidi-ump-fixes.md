@@ -166,7 +166,10 @@ upstream `master`. No UE-level run on Windows at this pin: §6 applies until U1.
   after the first in a batch get a zero delta.
 - **Tests (WinRT-free, run on the dispatcher the callback calls):**
   - SysEx7 batches of 4, 6, 8 and 10 words yield 2, 3, 4 and 5 packets, in order (the audit's
-    probes `g4`/`g6`/`g8`, plus a 10-word case, the size of a 29-byte SysEx in one batch);
+    probes `g4`/`g6`/`g8`, plus a 10-word case, the size of a 29-byte SysEx in one batch;
+    resolved 2026-10-03: a real 29-byte device stream never arrived as one 10-word batch, see the
+    [Erae hardware check](audit-winmidi-probe-erae-2026-10-03.md); the 10-word case stays as a
+    cheap boundary test);
   - 8 MT2 words yield 8 messages;
   - a mixed-group batch delivers only the in-range messages;
   - MT 0xF, MT 0x0 and a reserved type inside a filtered batch are dropped, inside an unfiltered
@@ -186,7 +189,9 @@ upstream `master`. No UE-level run on Windows at this pin: §6 applies until U1.
 - **Upstream:** PR candidate for #234. If upstream lands a one-line `on_bytes` → `on_bytes_multi`
   fix first, rebase and keep only the per-message verdict, the groupless policy and (b).
 - **Consequences:** device mode reports and other multi-packet SysEx complete; 10-word SysEx
-  batches arrive; MT2 bursts (encoders, MPE) arrive complete. A UMP consumer that reassembles
+  batches arrive (resolved 2026-10-03: the Erae delivered its 29-byte messages one packet per
+  callback, never as a 10-word batch; see the [Erae hardware check](audit-winmidi-probe-erae-2026-10-03.md));
+  MT2 bursts (encoders, MPE) arrive complete. A UMP consumer that reassembles
   SysEx7 per packet works unchanged. No identity change. Libremidi4UE `Midi1` inputs on Windows
   MIDI Services now receive every packet and would hit (p) — hence (p) next.
 
@@ -335,6 +340,10 @@ from this pin on:
 - **Physical input** needs a person at the devices: CC and encoder bursts, and a device that sends
   a 29-byte SysEx stream per touch (whether Windows MIDI Services delivers it as one 10-word batch
   is unverified). These go on the manual verification list for checkpoint A.
+  **Resolved 2026-10-03 for the 29-byte stream:** on Windows MIDI Services with an Erae 2 over USB,
+  every service callback carried exactly one packet, so a finger message arrived as 11 callbacks
+  and never as a 10-word batch; the stream came through the checkpoint-A pin intact
+  ([Erae hardware check](audit-winmidi-probe-erae-2026-10-03.md)). Open: CC and encoder bursts.
 
 ## 6. Crash exposure before checkpoint A
 
