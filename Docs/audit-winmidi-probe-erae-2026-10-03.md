@@ -76,12 +76,42 @@ per second, on the same port. Harmless.
 - The pre-fix pin was not run against this device. Its non-exposure follows from the measured
   callback shape and the defects' trigger conditions (a batch longer than 6 words; more than one
   message per batch), and from the absence of any failure with this device before the fixes.
-- Not tested: the output direction under large payloads (for example an image-drawing SysEx sent to
-  the device). The probe's own outbound traffic (version request, API-mode disable/enable, 128
-  zone requests) all worked.
+- Output direction under large payloads: tested later the same day, see section 5. (Before that the
+  probe's own outbound traffic, version request, API-mode disable/enable and 128 zone requests, had
+  all worked.)
 
 ## 4. State left behind
 
 - No probe process left running.
 - The run's logs and the probe tree stay on the test machine, outside this repository, next to the
   earlier records' material.
+
+## 5. Output direction: full-zone image SysEx (same day, same setup, optimised build)
+
+The probe was extended with drawing stages that send the device's full-zone image command (one
+SysEx per frame: 3475 bytes including F0/F7, packed as 579 SysEx7 packets / 1158 words on group 0,
+one `send_ump` call per frame). Build: the same pin plus the probe-local hook, compiled with
+`/O2 /DNDEBUG` (the plain release build keeps libremidi's per-packet `assert`, which adds one
+validation call per packet).
+
+| Stage | Frames | Rate | `send_ump` wall time per frame (min/avg/max/p99) | Failures |
+|---|---|---|---|---|
+| One static frame | 1 | - | 232 us | 0 |
+| Animation, 30 s at a 30 fps target | 900 | 30.03 fps, 0 dropped slots, 0 overruns | 221 / 235 / 290 / 254 us | 0 |
+| Redraw on touch, 45 s, coalesced to at most 30 fps | 1287 | 28.6 fps | 220 /236 / 308 / 258 us | 0 |
+
+- The call returns once the service has accepted the frame; the device-side draw time is not
+  measurable from the host. Observed on the device: the animation ran smoothly with no tearing,
+  flicker or stale frames, and the static frame showed the intended colours.
+- Input during sustained output (redraw-on-touch stage): 8476 finger messages at about 182/s, all 29
+  bytes, checksum ok, lifecycle consistent with 5 simultaneous fingers, and the probe's raw-word
+  reassembly identical in order to libremidi's `on_message` output. Large output and dense input on
+  the same device at the same time showed no interference.
+- Host-side latency, finger message received to the redraw's `send_ump` returned: about 0.3 ms of
+  processing; newest-message-per-frame average 5.0 ms, p99 10.2 ms, dominated by the 30 fps
+  coalescing wait. The observed end-to-end lag on the device was small and judged acceptable.
+- Device facts that matter to a consumer (not to this backend): the image command's pixel rows are
+  counted from the bottom edge (row 0 is the bottom row as seen by the player; columns run left to
+  right), channels are RGB, 8 bits per channel, and a 42 x 24 frame in one message works although
+  the device documentation recommends 32 px or less.
+
