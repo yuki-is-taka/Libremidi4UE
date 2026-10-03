@@ -35,6 +35,7 @@ Read this first; it routes to every doc below. The authoritative API spec is the
 |---|---|---|
 | [audit-winmidi-defects-2026-10-03.md](audit-winmidi-defects-2026-10-03.md) | point-in-time record (2026-10-03) | before touching any winmidi defect (ids a-ac), planning the fork/upstream fix batch, or bumping the libremidi submodule; file:line, severity, fix sketch, dependency graph and fix order per defect |
 | [audit-winmidi-probe-2026-10-03.md](audit-winmidi-probe-2026-10-03.md) | point-in-time record (2026-10-03) | when you need the hardware evidence (Push 3 over Windows MIDI Services, pin vs upstream HEAD) behind defects (c), (d), (g), (j), (i), or the pass criteria for a fixed libremidi |
+| [audit-winmidi-probe-cpA-2026-10-03.md](audit-winmidi-probe-cpA-2026-10-03.md) | point-in-time record (2026-10-03) | the checkpoint-A hardware verification (probe label `cpA`): (d), (g), (i), (p) rows passing, (c) still defective by design; the fork's new unit tests under MSVC |
 | [audit-winmidi-upstream-2026-10-03.md](audit-winmidi-upstream-2026-10-03.md) | point-in-time record (2026-10-03) | before filing, commenting on or tracking anything on upstream `celtera/libremidi` (issues/PRs sweep, Microsoft's in-box migration and porting-guide asks, upstream-only items N1-N10) |
 
 ## Backlog
