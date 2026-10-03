@@ -114,25 +114,23 @@ private:
 	/** Timestamp behavior used by libremidi input. */
 	libremidi::timestamp_mode TimestampMode = libremidi::timestamp_mode::Absolute;
 
-	// --- winmidi raw-tick timestamp correction (Libremidi4UE ADR-0002) ---
-	// Snapshotted at Initialize() from the just-constructed MidiIn, not read live from
-	// TimestampMode / the subsystem's observer API — SetTimestampMode only updates the member above,
-	// it does not touch an already-constructed MidiIn's baked-in Config, so a live read could
-	// describe a mode the running MidiIn is no longer using.
-
-	/** The API the constructed MidiIn actually resolved to (get_current_api(), post-construction). */
-	libremidi::API ActiveApi = libremidi::API::UNSPECIFIED;
-
-	/** The timestamp_mode baked into MidiIn's Config at construction time. */
-	libremidi::timestamp_mode ActiveTimestampMode = libremidi::timestamp_mode::Absolute;
-
 #if PLATFORM_WINDOWS
-	/** QueryPerformanceFrequency, queried once at Initialize. 0 = not yet queried, or the query failed. */
+	// --- Windows MIDI Services timestamp-domain check ---
+	// Decided at Initialize() from the just-constructed MidiIn, not read live from TimestampMode or the
+	// subsystem's observer API: SetTimestampMode only updates the member above, it does not touch an
+	// already-constructed MidiIn's baked-in Config.
+
+	/** True when MidiIn resolved to Windows MIDI Services with Absolute or Custom timestamps and the
+	 *  QueryPerformanceFrequency query succeeded. */
+	bool bCheckTimestampDomain = false;
+
+	/** QueryPerformanceFrequency, queried at Initialize when the check applies. 0 = not queried, or the
+	 *  query failed. */
 	uint64 CachedQpcFrequency = 0;
 
-	/** One-shot per Initialize; the WMS callback that drives HandleMessage/HandleUmpMessage is not
-	 *  guaranteed to run on any particular thread, so this is an atomic exchange, not a racy bool. */
-	std::atomic<bool> bTimestampCrossCheckLogged{false};
+	/** One-shot per Initialize; the Windows MIDI Services callback that drives HandleMessage /
+	 *  HandleUmpMessage is not guaranteed to run on any particular thread, hence atomic. */
+	std::atomic<bool> bTimestampDomainChecked{false};
 #endif
 
 	/** Ignore incoming SysEx messages when true. */
@@ -158,9 +156,10 @@ private:
 	void HandleWarning(std::string_view WarningText, const libremidi::source_location& Location);
 
 #if PLATFORM_WINDOWS
-	/** First-message-after-Open cross-check: converted timestamp vs. a fresh QPC-now conversion
-	 *  through the same path (Libremidi4UE ADR-0002). Logs Error once if they disagree by more than
-	 *  a few seconds — a sign the correction is now stale (upstream fixed, or the tick base changed). */
-	void RunTimestampCrossCheckOnce(int64 ConvertedTimestampNs);
+	/** Windows MIDI Services timestamp-domain check, on the first message after Initialize: the
+	 *  delivered timestamp is compared with QueryPerformanceCounter-now in nanoseconds. Logs one Error
+	 *  if they differ by more than a few seconds (the timestamps are not nanoseconds on the QPC
+	 *  timeline, which the public contract promises), one Verbose line otherwise. */
+	void CheckTimestampDomainOnce(int64 TimestampNs);
 #endif
 };

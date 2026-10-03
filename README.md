@@ -1,6 +1,8 @@
 # Libremidi4UE
 
-An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/libremidi) (v5.4.3), providing cross-platform MIDI 1.0 and MIDI 2.0 (UMP) support with hotplug device discovery.
+An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/libremidi), providing cross-platform MIDI 1.0 and MIDI 2.0 (UMP) support with hotplug device discovery.
+
+libremidi is carried as a git submodule from a fork, [yuki-is-taka/libremidi](https://github.com/yuki-is-taka/libremidi) (branch `libremidi4ue`): upstream `master` plus any fixes this plugin needs that upstream does not have yet. Every pinned commit has an immutable `libremidi4ue-pin-*` tag on the fork. See [Docs/decisions/adr-0003](Docs/decisions/adr-0003-libremidi-fork-strategy.md).
 
 ## Features
 
@@ -34,7 +36,14 @@ An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/librem
    git submodule update --init --recursive
    ```
 
-3. Regenerate project files and build.
+3. If your clone predates the switch of the submodule to the fork (October 2026), point it at the fork once:
+   ```bash
+   cd Plugins/Libremidi4UE
+   git submodule sync --recursive
+   git submodule update --init --recursive
+   ```
+
+4. Regenerate project files and build.
 
 ### Windows MIDI Services headers (Windows only)
 

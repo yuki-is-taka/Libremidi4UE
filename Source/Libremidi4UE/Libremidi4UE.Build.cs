@@ -9,6 +9,15 @@ public class Libremidi4UE : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		// libremidi is header-only and compiles inside this module's translation units; its Windows
+		// MIDI Services backend and C++/WinRT throw and catch C++ exceptions by design. UE enables
+		// exceptions only for targets compiled against the editor, so without this a game target would
+		// build that code with no unwinding (no /EH on MSVC). Engine precedent: AudioCaptureRtAudio,
+		// ImageWrapper.
+		bEnableExceptions = true;
+		// AutoRTFM cannot be used together with exceptions.
+		bDisableAutoRTFMInstrumentation = true;
+
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
