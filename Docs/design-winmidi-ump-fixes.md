@@ -1,7 +1,7 @@
 ---
 description: Plan of record for the 2026-10 libremidi winmidi UMP fix batch, checkpoint A — baseline bump with the timestamp-correction removal, upstream PR #264, (q), per-message input dispatch (g, b), (p), interim output group stamp (d); fork stack order, test strategy, hardware verification, deferred units and their triggers. Read before executing, reviewing or bumping past any of these units
 type: design
-status: current
+status: implemented
 updated: 2026-10-03
 ---
 
@@ -46,8 +46,9 @@ Normative rules are in ADR-0003. In short: fork `master` is fast-forwarded to up
 and never committed to; each unit is a topic branch; the integration branch `libremidi4ue` is
 rebuilt from the topics in the order below; every pinned SHA gets a `libremidi4ue-pin-*` tag
 pushed before the Libremidi4UE commit that pins it. The fork work happens in a clone separate from
-the submodule checkout. GitHub Actions stay disabled on the fork: upstream's workflows target
-self-hosted runners.
+the submodule checkout. GitHub Actions were planned to stay disabled on the fork, because upstream's
+workflows target self-hosted runners; they are in fact enabled, which is an open owner settings
+decision (backlog row).
 
 This table is the recorded stack order for checkpoint A:
 
@@ -247,6 +248,48 @@ timestamp rows pass; the (c) row is still defective by design. A UE-level run on
 machine with a UMP consumer bound to the Push 3 User port: the device's mode reports arrive and
 LED control in User mode works. The design doc goes `implemented` when checkpoint A is pinned and
 verified.
+
+#### Checkpoint A as shipped (2026-10-03)
+
+- Libremidi4UE `3db8a6f` (U0 commit 1, pin `libremidi4ue-pin-20261003-base` = `5c839a5`) and
+  `9840b4b` (U0 commit 2, pin `libremidi4ue-pin-20261003-a` = `6a572eb`). Commit 1 also turned on
+  C++ exceptions for the Libremidi4UE module (exceptions spike, backlog Shipped).
+- Probe `cpA`: [audit-winmidi-probe-cpA-2026-10-03.md](audit-winmidi-probe-cpA-2026-10-03.md).
+- UE level, Windows test machine, a hosted UMP consumer bound to the Push 3 User port (Win64
+  Editor build run as `-game`): the `0A 01` mode report arrives whole and is acknowledged; a
+  Device Inquiry and a palette get sent through the consumer land on cable 2 (WinMM ground truth:
+  both replies on the User cable only) and their replies reach the consumer's input; the WMS
+  timestamp-domain check passes (delivered timestamp 0.27 ms before QPC-now). The U0 commit 1
+  run, on the base pin, showed the check passing (0.29 ms) and the mode report lost (only its
+  SysEx Start packet delivered), as expected there. Pad LEDs were not inspected (nobody at the
+  device); LED messages take the same send path as the requests above.
+- Builds and tests: Mac Editor; Win64 Editor and Win64 Game (the Game build compiles Libremidi4UE
+  with `/EHsc` through the `.Exceptions` shared-PCH variant); no warnings. Libremidi4UE automation
+  tests 1 of 1 on Mac and Windows; the consumer's automation suite unchanged before and after both
+  commits (Mac 575 of 575, Windows 605 of 605, 0 failed).
+
+#### Consumer notes (behaviour changes at checkpoint A)
+
+What a libremidi user, and so a Libremidi4UE consumer, sees differently on Windows MIDI Services
+from this pin on:
+
+- **`on_raw_data` fires per message, not per service batch.** A raw consumer that counted
+  callbacks as batches, or expected several UMPs per call, now gets one delivered message per call
+  (only messages that pass the port's group filter).
+- **Groupless and reserved message types are dropped on group-filtered ports.** MT 0x0
+  (utility), MT 0xF (UMP stream) and the reserved types 0x6-0xC and 0xE no longer reach an input
+  opened on a device port (a block); a virtual port, which has no group filter, still delivers
+  them ([adr-0005](decisions/adr-0005-winmidi-input-group-addressing.md)).
+- **In `Relative` timestamp mode**, the messages after the first of a batch carry a zero delta (they
+  share the batch's service timestamp).
+- **SysEx over 1 KiB sent as UMP on a MIDI 1 backend is refused.** On WinMM (or any MIDI 1
+  backend) a UMP send whose SysEx7 exceeds cmidi2's 1 KiB buffer now returns an error instead of
+  overrunning the stack ((q)). On a MIDI 1 backend, send larger SysEx as MIDI 1 bytes
+  (`send_message`), which needs no conversion.
+- **Outgoing groups are restamped on single-group ports.** A group-bearing UMP sent to a port
+  whose block does not contain its group goes out on the block's first group, with one warning per
+  open; a caller that relied on encoding another cable's group into a message sent through a
+  given port now reaches that port's cable instead (U3, interim until the port-identity redesign).
 
 ## 4. Test strategy
 

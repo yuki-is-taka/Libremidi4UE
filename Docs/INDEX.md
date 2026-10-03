@@ -27,7 +27,7 @@ Read this first; it routes to every doc below. The authoritative API spec is the
 ## Design / WIP
 | Doc | Status | Open when |
 |---|---|---|
-| [design-winmidi-ump-fixes.md](design-winmidi-ump-fixes.md) | current | before executing, reviewing or rebasing the 2026-10 winmidi UMP fix batch (checkpoint A: U0 baseline, #264, (q), U2 input dispatch, (p), U3 output group); the fork's recorded stack order; test strategy, probe verification, deferred units and triggers |
+| [design-winmidi-ump-fixes.md](design-winmidi-ump-fixes.md) | implemented (checkpoint A pinned and verified 2026-10-03) | before executing, reviewing or rebasing the 2026-10 winmidi UMP fix batch (checkpoint A: U0 baseline, #264, (q), U2 input dispatch, (p), U3 output group); the fork's recorded stack order; test strategy, probe verification, deferred units and triggers |
 | [wip-winmidi-inbox-migration.md](wip-winmidi-inbox-migration.md) | investigation | before touching Windows MIDI port identity/enumeration; before the in-box API migration or the port-identity redesign (its §1 points to the 2026-10 decision; its §4 is a 2026-09-23 history superseded by the audit) |
 
 ## Audits and evidence (point-in-time records)
