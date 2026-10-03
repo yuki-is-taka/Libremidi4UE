@@ -98,7 +98,7 @@ validation call per packet).
 |---|---|---|---|---|
 | One static frame | 1 | - | 232 us | 0 |
 | Animation, 30 s at a 30 fps target | 900 | 30.03 fps, 0 dropped slots, 0 overruns | 221 / 235 / 290 / 254 us | 0 |
-| Redraw on touch, 45 s, coalesced to at most 30 fps | 1287 | 28.6 fps | 220 /236 / 308 / 258 us | 0 |
+| Redraw on touch, 45 s, coalesced to at most 30 fps | 1287 | 28.6 fps | 220 / 236 / 308 / 258 us | 0 |
 
 - The call returns once the service has accepted the frame; the device-side draw time is not
   measurable from the host. Observed on the device: the animation ran smoothly with no tearing,
@@ -112,6 +112,7 @@ validation call per packet).
   coalescing wait. The observed end-to-end lag on the device was small and judged acceptable.
 - Device facts that matter to a consumer (not to this backend): the image command's pixel rows are
   counted from the bottom edge (row 0 is the bottom row as seen by the player; columns run left to
-  right), channels are RGB, 8 bits per channel, and a 42 x 24 frame in one message works although
+  right), the device's finger coordinates share that origin (a disc drawn at a finger's reported
+  position appeared directly under the finger), channels are RGB, 8 bits per channel, and a 42 x 24 frame in one message works although
   the device documentation recommends 32 px or less.
 
