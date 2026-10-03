@@ -329,8 +329,9 @@ from this pin on:
   relies on catching `winrt::hresult_error` and other exceptions. The spike builds Win64 Game,
   reads the effective `/EH` flag for those units, and forces one WinRT failure path to see whether
   it is caught. The outcome decides whether Libremidi4UE's module rules opt in to exceptions. An
-  access violation is not a C++ exception (`catch (...)` catches it only under `/EHa`), and the
-  backend must not rely on that.
+  access violation is not a C++ exception, and the backend must not rely on catching it. (Under
+  `/EHsc` `catch (...)` does not catch it; the spike found that the earlier Game build, with no
+  `/EH` flag, did swallow it. Outcome recorded in ADR-0007.)
 - **Physical input** needs a person at the devices: CC and encoder bursts, and a device that sends
   a 29-byte SysEx stream per touch (whether Windows MIDI Services delivers it as one 10-word batch
   is unverified). These go on the manual verification list for checkpoint A.
