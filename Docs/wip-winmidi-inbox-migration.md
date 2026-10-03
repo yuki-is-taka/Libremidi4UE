@@ -67,8 +67,11 @@ port-identity row.
   November 2026, and it is the only supported Windows MIDI Services API target if you intend to
   ship"; "Windows 11 24H2 leaves support in October 2026, and so will not receive the in-box API".
   **Consequence**: production Windows machines must be 25H2+ after migration.
-- RC4 carries **no documented expiry/kill switch** (in-box previews self-expire; Preview 9 by
-  2027-01-15). Preview 1 notes say RC4 can stay installed side-by-side. **Breakage of RC4 via a
+- RC4 carries **no documented expiry/kill switch**. The in-box previews carry no built-in expiry either:
+  the Preview 9 release notes only allow distributing the preview WinRT binaries with an
+  alpha/beta/preview app that enforces its own expiration no later than 2027-01-15
+  ([adr-0006](decisions/adr-0006-date-fallback-rationale-corrected.md)). Preview 1 notes say RC4
+  can stay installed side-by-side. **Breakage of RC4 via a
   future in-box midisrv update is INFERRED, not stated** anywhere found.
 - Pre-ship in-box previews need the implementation `.dll`/`.pri` side-by-side with the host exe
   (else `REGDB_E_CLASSNOTREG`) — awkward with `UnrealEditor.exe` as host; goes away after ship.

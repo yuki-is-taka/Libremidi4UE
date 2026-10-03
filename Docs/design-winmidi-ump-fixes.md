@@ -326,6 +326,6 @@ anyway.
 | U9 send robustness and batching | (y) | Observed send failures under load or a measurable cost of large SysEx sends; otherwise the in-box port |
 | U10 MIDI 1 → MIDI 2 input upgrade semantics | (aa) | A maintainer conversation, which the owner handles (shared semantics on every backend); earlier on an observed held note in a consumer applying MIDI 2.0 semantics |
 | U11 monotonic flag | (ab) | A consumer that needs service timestamps in `SystemMonotonic` mode on Windows MIDI Services |
-| Port-identity redesign | (a), (c), (e), `Ordinal`, ADR-0005 output half | In-box ship (late November 2026); date fallback in the backlog row (ADR-0003 rule 2) |
+| Port-identity redesign | (a), (c), (e), `Ordinal`, ADR-0005 output half | In-box ship (late November 2026); date fallback in the backlog row (ADR-0003 rule 2; rationale per ADR-0006) |
 | One connection per endpoint, one session | (h) | With or after the port-identity redesign and the in-box port |
 | Availability probe | (z) | In-box port |
