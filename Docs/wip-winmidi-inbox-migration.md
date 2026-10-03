@@ -1,30 +1,39 @@
 ---
-description: Findings on the Windows MIDI Services in-box API migration (Microsoft.Windows.Devices.Midi2 → Windows.Devices.Midi2) and a code-review catalog of existing winmidi backend defects in upstream libremidi; read before touching anything Windows-MIDI-identity-related or before executing the batched fork-and-upstream plan
+description: Findings on the Windows MIDI Services in-box API migration (Microsoft.Windows.Devices.Midi2 → Windows.Devices.Midi2), the open port-identity questions, and the 2026-09-23 code review of winmidi defects; read before touching anything Windows-MIDI-identity-related or before the in-box migration / port-identity redesign. The 2026-10 UMP fix batch itself is in design-winmidi-ump-fixes.md
 type: wip
 status: investigation
-updated: 2026-09-23
+updated: 2026-10-03
 ---
 
 # WinMIDI in-box API migration — findings
 
-> **Status**: Investigation only. Not a design; no code changes proposed here.
+> **Status**: Investigation for the in-box migration and the port-identity redesign. Not a design.
+> The 2026-10 UMP fix batch is decided and designed elsewhere (§1).
 > **Scope**: Libremidi4UE's `Source/ThirdParty/WindowsMidiServices` projection + the `winmidi`
-> backend in the `libremidi` submodule (upstream `celtera/libremidi`).
-> **Last verified**: 2026-09-23
+> backend in the `libremidi` submodule (upstream `celtera/libremidi`; carried in the owner's fork
+> per [adr-0003](decisions/adr-0003-libremidi-fork-strategy.md)).
+> **Last verified**: 2026-09-23 (§2–§3); §1, §4 banner, §5 and §6 updated 2026-10-03.
 
 ## 1. Status / plan
 
-**Owner decision (2026-09-23): do nothing now.** When Windows MIDI Services ships in-box
-(Windows 11 25H2+, expected last week of November 2026), resolve the in-box API migration
-(`Microsoft.Windows.Devices.Midi2` → `Windows.Devices.Midi2`) **together with** every winmidi
-defect in §4 below, in the owner's own fork of `libremidi`, then upstream the needed parts as
-PRs to `celtera/libremidi`.
+**Owner decision (2026-10-03), replacing the 2026-09-23 "do nothing now":** fix the UMP-path
+winmidi defects now, in the owner's fork of `libremidi`, under the fork strategy of
+[adr-0003](decisions/adr-0003-libremidi-fork-strategy.md) (which supersedes
+[adr-0001](decisions/adr-0001-libremidi-submodule-tracks-upstream.md)). The first batch is
+checkpoint A of [design-winmidi-ump-fixes.md](design-winmidi-ump-fixes.md): the baseline bump with
+the timestamp-correction removal ([adr-0004](decisions/adr-0004-winmidi-timestamp-correction-removed.md)),
+upstream PR #264, (q), the per-message input dispatch for (g) and (b)
+([adr-0005](decisions/adr-0005-winmidi-input-group-addressing.md)), (p), and the interim output
+group stamp for (d). The remaining UMP-path defects are [backlog](backlog.md) rows, each with a
+trigger. Upstream PRs are filed by the owner only.
 
-Reviving a fork contradicts [adr-0001](decisions/adr-0001-libremidi-submodule-tracks-upstream.md)
-(submodule tracks upstream directly, fork retired because it carried no unique delta). Executing
-this plan requires a new ADR superseding adr-0001 **at that time** — not written now.
+What still waits for the in-box ship, and is what this doc investigates: the in-box API migration
+(`Microsoft.Windows.Devices.Midi2` → `Windows.Devices.Midi2`), the port-identity redesign ((a),
+(c), (e), the `Ordinal` row, adr-0005's output half) and one connection per endpoint ((h)). These
+stay fork-only until then (adr-0003 rule 2); the date fallback lives in the backlog's
+port-identity row.
 
-**Triggers to start:**
+**Triggers to start the in-box work:**
 - The in-box API ships (Windows 11 25H2+, end of November 2026 per Microsoft's porting guide).
 - RC4 (the currently bundled SDK) actually breaks — no confirmed expiry is on record; see §2.
 - Movement on upstream libremidi issue #252 (a migration guide with no maintainer response as of
@@ -72,7 +81,7 @@ this plan requires a new ADR superseding adr-0001 **at that time** — not writt
   builds against that SDK version.
 - Dev machine (build 26300, 26H2 Dev channel) has **no** in-box `Windows.Devices.Midi2` yet.
 - **Upstream libremidi state** (as of 2026-09-23):
-  - #252 (migration guide by Pete Brown / GitHub `Psychlist1972`, 2026-09-07) — no maintainer
+  - #252 (migration guide by a Windows MIDI Services team member, 2026-09-07) — no maintainer
     response.
   - #254 (same author, 2026-09-07) — no maintainer response.
   - #234 (COM path drops batched UMP) — stalled.
@@ -109,6 +118,15 @@ Source: upstream #252, `inbox-dev-preview-1` release notes. Not verified against
 
 ## 4. Existing winmidi defects (code review of upstream `origin/master`)
 
+> **Superseded for current state (2026-10-03).** This section is the 2026-09-23 review at
+> `b9f19f7`, kept as history. Current file:line, severity and fix sketches for every defect, (a)
+> to (ac), are in the [defect audit](audit-winmidi-defects-2026-10-03.md) at upstream `5c839a5`;
+> hardware evidence in the [probe record](audit-winmidi-probe-2026-10-03.md); each defect's
+> disposition (fixed in a checkpoint-A unit, deferred with a trigger, or outside the UMP-only
+> scope) in [backlog.md](backlog.md). Statements the audit or the probe overturned are marked
+> **Now:** below. Defects (j) to (ac) were found after this review and appear only in the audit
+> and the backlog.
+
 Reviewed against upstream `celtera/libremidi` `origin/master` = `b9f19f7c8bd647de760cc2d69f7e7d9648b0baeb`
 (fetched 2026-09-23; the submodule pin `67e8ccd` is 34 commits behind — see §2). Paths are under
 `include/libremidi/backends/winmidi/` unless noted. **Every location below was re-read directly
@@ -123,9 +141,9 @@ function-block (FB)-derived port cannot be opened by this path.
 `observer.hpp:140-196` (`get_input_ports`/`get_output_ports`) enumerates **both**
 `GetDeclaredFunctionBlocks()` and `GetGroupTerminalBlocks()` for every endpoint — confirmed
 exactly at these lines — so a MIDI 2.0 device that declares both FBs and GTBs for the same
-group lists twice. Pete's suggested fix: a shared `blocks_for` helper (FBs if present, else GTBs)
+group lists twice. The issue's suggested fix: a shared `blocks_for` helper (FBs if present, else GTBs)
 used by both enumeration and `get_port` (~40 lines) — but it changes what `port.port` means (see
-§5, open decision 1).
+§5, open decision 1). **Now:** part of the port-identity redesign (backlog).
 
 **b. #217 follow-up: multi-group blocks still filtered to their first group only.**
 The original #217 bug (`port.port - 1` used as a raw group index) is already fixed on
@@ -136,9 +154,10 @@ groups** (`GroupCount() > 1`) is still filtered down to only its first group: th
 paths compare a single value with `==`, not membership in the block's group range —
 `midi_in.hpp:195-200` (non-COM `process_message`) and `midi_in.hpp:230-235` (COM raw callback
 `process_message`) both do `if (group != m_group_filter) return;`. Confirmed exactly at these
-lines.
+lines. **Now:** fixed by unit U2 with a range verdict
+([adr-0005](decisions/adr-0005-winmidi-input-group-addressing.md)).
 
-**c. Block direction suspected INVERTED (UNVERIFIED on hardware).**
+**c. Block direction suspected INVERTED (confirmed on hardware 2026-10-03, see below).**
 Microsoft defines function-block direction from the block's own viewpoint (`BlockInput` =
 destination into the device, `BlockOutput` = source out of the device — SDK doc
 `docs/sdk-reference/Enumeration/MidiFunctionBlockDirectionEnum.md`, and Microsoft's own
@@ -152,11 +171,15 @@ file lives in our submodule and was not independently re-fetched here). Upstream
 device-viewpoint definition is right, this is backwards: a device-side `BlockOutput` (the device
 sends) should appear as an **input** port to the app, and vice versa. Masked on bidirectional
 blocks and on symmetric-cable devices; a send-only MIDI 1.0 device would be missing from inputs
-entirely. **Not verified on real hardware in this pass.**
+entirely. **Now:** confirmed on hardware (all six Push 3 ports and a second interface,
+[probe §3.1](audit-winmidi-probe-2026-10-03.md)); deferred into the port-identity redesign, which
+fixes it by construction (backlog).
 
 **d. Output group hard-coded — silent misroute today.**
-MIDI 1.0→UMP conversion always emits group 0: `detail/conversion.hpp:112` `const int group = 0;`
-— confirmed exactly. `midi_out.hpp:45-47` resolves the block (`get_port(*device_id, port.port)`)
+**Now:** `detail/conversion.hpp:112` is dead code (only the uncalled `ump_from_midi1` uses it); the
+real sources are cmidi2's converter context, whose group is never set (`cmidi2.hpp:2630`), and the
+verbatim `send_ump` ([audit §3 (d)](audit-winmidi-defects-2026-10-03.md)). Interim fix: unit U3.
+`midi_out.hpp:45-47` resolves the block (`get_port(*device_id, port.port)`)
 only to validate it exists, then discards it — `gp` is never referenced again in the file,
 including in `send_ump` (`midi_out.hpp:174-195`). So writing to "Port 3" of a multi-cable
 interface lands on cable 1 (group 0) regardless of which port was opened.
@@ -184,15 +207,15 @@ issues, since `add_device` (lines 271-281) iterates both `GetDeclaredFunctionBlo
 `GetGroupTerminalBlocks()` exactly like the enumeration path.
 
 **g. COM raw-callback input path: batch-level filtering, no groupless-message exemption.**
-Overlaps #234 (batched UMP drop). The COM raw callback `process_message(sessionId, connectionId,
+**Now:** this *is* #234, and crash-class: a batch over six words overruns a stack object
+([probe §3.3](audit-winmidi-probe-2026-10-03.md)). Fixed by unit U2; the groupless question below
+is answered by [adr-0005](decisions/adr-0005-winmidi-input-group-addressing.md). The COM raw callback `process_message(sessionId, connectionId,
 timestamp, wordCount, ump)` (`midi_in.hpp:213-240`) reads the group from `ump` (the first UMP word
 only, via `cmidi2_ump_get_group(ump)`, line 232) and applies the resulting pass/fail verdict to
 the **entire** batch of `wordCount` words rather than per-message — confirmed by reading the
 function; there is no loop splitting the batch by message. There is also no exemption in either
 `process_message` overload for UMP message types that are inherently groupless (Utility/MT 0x0,
-Stream/MT 0xF) — group filtering applies uniformly regardless of message type. This second point
-is a reading of general UMP semantics, not something the C++ alone proves; flagged for the
-owner's confirmation.
+Stream/MT 0xF) — group filtering applies uniformly regardless of message type.
 
 **h. One connection per port (optional).**
 Both directions open exactly one `MidiEndpointConnection` per port: `midi_in.hpp:113`
@@ -200,20 +223,20 @@ Both directions open exactly one `MidiEndpointConnection` per port: `midi_in.hpp
 same call — confirmed exactly at both lines. The porting guide recommends one ref-counted
 connection per **endpoint** (shared across the endpoint's blocks/groups) instead. Not a
 correctness bug today (each port already gets its own connection), just diverges from
-Microsoft's recommended pattern — lowest priority of the nine.
+Microsoft's recommended pattern — lowest priority of the nine. **Now:** deferred until after the
+port-identity redesign and the in-box port (backlog).
 
 **i. `to_ns()` returns raw QPC ticks, not nanoseconds, despite the timestamp being documented
 (and consumed) as ns.** `midi_in.hpp:208`/`:237` (`process_message`, both the non-COM and COM
 raw-callback overloads) — confirmed exactly at these lines, present on `origin/master` as well as
 the pinned submodule commit. Every other backend examined does an explicit tick/tick-domain → ns
 conversion in its own `to_ns()`; winmidi is the only one that returns the raw device value
-unconverted. Worked around wrapper-side for now (Libremidi4UE ADR-0002); should be fixed here, in
-the batched fork work, alongside defects (a)-(h), and the wrapper-side correction removed in the
-same change once the fix lands in the pinned submodule commit.
+unconverted. **Now:** fixed upstream in `5c839a5` (PR #263); the wrapper-side correction is removed
+in the same commit as the bump ([adr-0004](decisions/adr-0004-winmidi-timestamp-correction-removed.md)).
 
 ## 5. Open decisions for the owner
 
-To settle at execution time, before design review — not now:
+Items 1, 3 and 4 are open for the port-identity redesign; item 2 is answered.
 
 1. **What a "port" is.** (a) per block — `port.port` changes meaning across a discovery event
    (e.g. GTB 1 today, FB 0 tomorrow, per item a); (b) endpoint + group + direction (the porting
@@ -224,13 +247,16 @@ To settle at execution time, before design review — not now:
    item c's citation — not independently verified here).
 2. **Group-override policy for output** — does the fixed backend override the UMP group with the
    opened port's resolved group (closing item d), or respect whatever group the caller already
-   encoded in the message?
+   encoded in the message? **Answered (2026-10-03):** the backend stamps the port's group,
+   following Microsoft's guidance that the group lives in the message. Interim rule until the
+   port-identity redesign: range-membership re-stamp with a guard for asymmetric devices (unit U3;
+   [adr-0005](decisions/adr-0005-winmidi-input-group-addressing.md) output note). The redesign
+   makes every port one group, so the stamp becomes the port's group by construction.
 3. **Inactive/mid-discovery blocks** — are function blocks with `IsActive() == false`, or blocks
    whose name is still empty mid-discovery, listed as ports at all?
 4. **`port.port` semantics is upstream's call.** Any change to what a port ID means is a decision
-   for `celtera/libremidi` maintainers (or our own fork pending their acceptance); our fork
-   reviving to carry it needs an ADR superseding
-   [adr-0001](decisions/adr-0001-libremidi-submodule-tracks-upstream.md) at that time.
+   for `celtera/libremidi` maintainers; until they decide, the fork carries ours under
+   [adr-0003](decisions/adr-0003-libremidi-fork-strategy.md).
 
 ## 6. Downstream impact
 
@@ -246,19 +272,18 @@ case WINDOWS_MIDI_SERVICES:
 Windows backend. If upstream's port model changes what `port.port`/`Number()` means (open
 decision 1), this ordinal — and everything that keys off it — must follow.
 
-**Thal.** `Source/ThalMidi/Private/ThalMidiBackendLibremidi.cpp` — verified against current code:
-- `GeneratePortId` (lines 16-36) builds the port ID as `Prefix + DeviceIdent.String + ":" +
-  PortHandle` for the `String`-typed device-identifier case (line 27) — on Windows this resolves
-  to `in:<EndpointDeviceId>:<GTB number>` / `out:<EndpointDeviceId>:<GTB number>`, matching the
-  task brief's shorthand.
-- `FindMatchingPort` (lines 128-169) does **not** compare this `PortId` (or the device identifier
-  it's built from) at all when reconnecting a saved binding. It copies only `DisplayName`,
-  `DeviceName`, `PortName`, `Manufacturer`, `Serial`, `Ordinal` from the saved snapshot (lines
-  154-160) into a reconstructed `FLibremidiPortInfo`, then calls `FindClosestPort` — a weighted,
-  purely heuristic match (delegates to upstream `libremidi::find_closest_port`) — with no exact-ID
-  attempt first. `Ordinal` (the GTB number, per the point above) is one of the fields that
-  heuristic weighs.
-- See Thal's own backlog row (deliverable 3, below) for the consequence.
+**Consumers.** A typical downstream consumer (verified against one, 2026-09-23):
+- builds a stable port id from the device identifier and the native port handle — on Windows
+  `in:<EndpointDeviceId>:<GTB number>` / `out:<EndpointDeviceId>:<GTB number>`, so the GTB number
+  is part of a persisted id;
+- reconnects a saved binding without comparing that id: it rebuilds an `FLibremidiPortInfo` from
+  the saved `DisplayName`, `DeviceName`, `PortName`, `Manufacturer`, `Serial` and `Ordinal`, then
+  calls `FindClosestPort`, a weighted heuristic match (delegating to
+  `libremidi::find_closest_port`), with no exact-id attempt first. `Ordinal` (the GTB number, per
+  the point above) is one of the fields the heuristic weighs.
+- Consequence: a change to what a port number means changes persisted ids and shifts the
+  heuristic. Exact-identity reconnect needs a group in the key, which libremidi's port information
+  does not carry until (a); it lands with the port-identity redesign (backlog `Ordinal` row).
 
 ## 7. Test plan sketch
 
