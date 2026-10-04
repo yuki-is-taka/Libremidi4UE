@@ -26,23 +26,32 @@ public class libremidi : ModuleRules
 			PublicDefinitions.Add("LIBREMIDI_WINMM");
 			PublicSystemLibraries.Add("winmm.lib");
 
-			// MIDI 2.0: Windows MIDI Services
-			PublicDefinitions.Add("LIBREMIDI_WINMIDI");
+			// MIDI 2.0: ENABLE_MIDI2 stays on regardless; the Windows MIDI Services backend itself is
+			// compiled in only when the host project supplies the Windows.Devices.Midi2 projection
+			// (same detection as the WindowsMidiServices module, which also sets WITH_WINDOWS_MIDI_SERVICES).
 			PublicDefinitions.Add("LIBREMIDI_ENABLE_MIDI2");
-			PublicSystemLibraries.Add("WindowsApp.lib");
-			
-			// Include order matters: MIDI SDK headers must come before Windows SDK C++/WinRT
-			string WindowsMidiServicesPath = Path.Combine(ModuleDirectory, "..", "WindowsMidiServices", "Win64", "include");
-			PublicSystemIncludePaths.Add(WindowsMidiServicesPath);
-			
-			string WindowsSdkCppWinRTPath = Path.Combine(
-				Target.WindowsPlatform.WindowsSdkDir,
-				"Include",
-				Target.WindowsPlatform.WindowsSdkVersion,
-				"cppwinrt");
-			PublicSystemIncludePaths.Add(WindowsSdkCppWinRTPath);
-			
 			PublicDependencyModuleNames.Add("WindowsMidiServices");
+
+			string WindowsMidiServicesPath = WindowsMidiServices.FindIncludeDir(Target);
+			if (WindowsMidiServicesPath != null)
+			{
+				PublicDefinitions.Add("LIBREMIDI_WINMIDI");
+				PublicSystemLibraries.Add("WindowsApp.lib");
+
+				// Include order matters: the project's matched C++/WinRT projection must come before the
+				// Windows SDK C++/WinRT. The SDK that UE selects can carry an older cppwinrt than the one
+				// the projection was generated with, and each generated header asserts the exact version.
+				// The projection ships its own winrt/base.h plus the whole dependency closure, so nothing
+				// should resolve from the SDK directory; it stays as a fallback behind it.
+				PublicSystemIncludePaths.Add(WindowsMidiServicesPath);
+
+				string WindowsSdkCppWinRTPath = Path.Combine(
+					Target.WindowsPlatform.WindowsSdkDir,
+					"Include",
+					Target.WindowsPlatform.WindowsSdkVersion,
+					"cppwinrt");
+				PublicSystemIncludePaths.Add(WindowsSdkCppWinRTPath);
+			}
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{

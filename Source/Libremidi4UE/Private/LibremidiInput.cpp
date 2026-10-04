@@ -6,6 +6,7 @@
 #include "LibremidiEngineSubsystem.h"
 #include "LibremidiMessage.h"
 #include "LibremidiTimestampConversion.h"
+#include "LibremidiExceptionGuard.h"
 
 #if PLATFORM_WINDOWS
 // Deliberately NOT routed through Windows/AllowWindowsPlatformTypes.h: that wrapper pulls in
@@ -28,6 +29,32 @@ THIRD_PARTY_INCLUDES_START
 #undef FVector
 #endif
 THIRD_PARTY_INCLUDES_END
+
+namespace
+{
+	// Constructing a midi_in can throw (on the Windows MIDI Services backend: C++/WinRT failures).
+	// Nothing may escape; on failure the input stays uninitialized and MIDI input stays disabled.
+	template <typename TConfig>
+	bool TryConstructMidiIn(
+		TUniquePtr<libremidi::midi_in>& OutMidiIn,
+		TConfig& Config,
+		libremidi::input_api_configuration& ApiConfig)
+	{
+		try
+		{
+			OutMidiIn = MakeUnique<libremidi::midi_in>(Config, ApiConfig);
+			return true;
+		}
+		catch (...)
+		{
+			OutMidiIn.Reset();
+			UE_LOG(LogLibremidi4UE, Error,
+				TEXT("LibremidiInput: libremidi threw while creating the input: %s. MIDI input is disabled."),
+				*Libremidi4UE::DescribeCurrentException());
+			return false;
+		}
+	}
+}
 
 ULibremidiEngineSubsystem* ULibremidiInput::GetOwnerSubsystem() const
 {
@@ -141,7 +168,10 @@ bool ULibremidiInput::Initialize(
 		Config.timestamps = TimestampMode;
 		Config.midi1_channel_events_to_midi2 = bMidi1ChannelEventsToMidi2;
 
-		MidiIn = MakeUnique<libremidi::midi_in>(Config, ApiConfig);
+		if (!TryConstructMidiIn(MidiIn, Config, ApiConfig))
+		{
+			return false;
+		}
 		UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiInput created MIDI2 (UMP) input."));
 	}
 	else
@@ -167,7 +197,10 @@ bool ULibremidiInput::Initialize(
 		Config.ignore_sensing = bIgnoreSensing;
 		Config.timestamps = TimestampMode;
 
-		MidiIn = MakeUnique<libremidi::midi_in>(Config, ApiConfig);
+		if (!TryConstructMidiIn(MidiIn, Config, ApiConfig))
+		{
+			return false;
+		}
 		UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiInput created MIDI1 input."));
 	}
 
@@ -209,10 +242,19 @@ bool ULibremidiInput::OpenInput(const FLibremidiInputInfo& PortInfo)
 	libremidi::input_port Port;
 	static_cast<libremidi::port_information&>(Port) = PortInfo.GetPort();
 	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiInput OpenInput: %s"), UTF8_TO_TCHAR(Port.display_name.c_str()));
-	const stdx::error Result = MidiIn->open_port(Port);
-	if (Result != stdx::error{})
+	try
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiInput OpenInput failed for port: %s"), UTF8_TO_TCHAR(Port.display_name.c_str()));
+		const stdx::error Result = MidiIn->open_port(Port);
+		if (Result != stdx::error{})
+		{
+			UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiInput OpenInput failed for port: %s"), UTF8_TO_TCHAR(Port.display_name.c_str()));
+			return false;
+		}
+	}
+	catch (...)
+	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("LibremidiInput OpenInput: libremidi threw for port %s: %s. The port stays closed."),
+			UTF8_TO_TCHAR(Port.display_name.c_str()), *Libremidi4UE::DescribeCurrentException());
 		return false;
 	}
 
@@ -228,7 +270,15 @@ void ULibremidiInput::CloseInput()
 	}
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiInput CloseInput."));
-	MidiIn->close_port();
+	try
+	{
+		MidiIn->close_port();
+	}
+	catch (...)
+	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("LibremidiInput CloseInput: libremidi threw: %s"),
+			*Libremidi4UE::DescribeCurrentException());
+	}
 }
 
 bool ULibremidiInput::IsPortOpen() const

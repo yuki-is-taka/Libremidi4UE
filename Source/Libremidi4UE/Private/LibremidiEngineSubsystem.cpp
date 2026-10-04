@@ -4,6 +4,7 @@
 #include "LibremidiEngineSubsystem.h"
 #include "Libremidi4UELog.h"
 #include "LibremidiSettings.h"
+#include "LibremidiExceptionGuard.h"
 
 void ULibremidiEngineSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -50,7 +51,17 @@ TArray<FLibremidiInputInfo> ULibremidiEngineSubsystem::GetInputPorts() const
 		return Ports;
 	}
 
-	std::vector<libremidi::input_port> InputPorts = Observer->get_input_ports();
+	std::vector<libremidi::input_port> InputPorts;
+	try
+	{
+		InputPorts = Observer->get_input_ports();
+	}
+	catch (...)
+	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("LibremidiEngineSubsystem GetInputPorts failed: %s"),
+			*Libremidi4UE::DescribeCurrentException());
+		return Ports;
+	}
 	Ports.Reserve(static_cast<int32>(InputPorts.size()));
 	for (libremidi::input_port& Port : InputPorts)
 	{
@@ -157,7 +168,17 @@ TArray<FLibremidiOutputInfo> ULibremidiEngineSubsystem::GetOutputPorts() const
 		return Ports;
 	}
 
-	std::vector<libremidi::output_port> OutputPorts = Observer->get_output_ports();
+	std::vector<libremidi::output_port> OutputPorts;
+	try
+	{
+		OutputPorts = Observer->get_output_ports();
+	}
+	catch (...)
+	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("LibremidiEngineSubsystem GetOutputPorts failed: %s"),
+			*Libremidi4UE::DescribeCurrentException());
+		return Ports;
+	}
 	Ports.Reserve(static_cast<int32>(OutputPorts.size()));
 	for (libremidi::output_port& Port : OutputPorts)
 	{
@@ -198,9 +219,23 @@ void ULibremidiEngineSubsystem::StartObserver()
 		HandleOutputPortRemoved(Port);
 	};
 
-	const libremidi::API Api = Settings->GetResolvedBackendAPI();
-	libremidi::observer_api_configuration ApiConfig = libremidi::observer_configuration_for(Api);
-	Observer = MakeUnique<libremidi::observer>(Config, ApiConfig);
+	// libremidi (and the C++/WinRT behind its Windows MIDI Services backend) reports failure by
+	// throwing: service not running, runtime DLL not loadable, API not available on this Windows.
+	// Nothing may escape into the engine; on failure the observer stays null and MIDI stays disabled.
+	try
+	{
+		const libremidi::API Api = Settings->GetResolvedBackendAPI();
+		libremidi::observer_api_configuration ApiConfig = libremidi::observer_configuration_for(Api);
+		Observer = MakeUnique<libremidi::observer>(Config, ApiConfig);
+	}
+	catch (...)
+	{
+		Observer.Reset();
+		UE_LOG(LogLibremidi4UE, Error,
+			TEXT("LibremidiEngineSubsystem StartObserver failed: libremidi threw: %s. MIDI is disabled until the observer is restarted."),
+			*Libremidi4UE::DescribeCurrentException());
+		return;
+	}
 
 	LogObserverInfo();
 	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiEngineSubsystem StartObserver complete."));
@@ -220,15 +255,23 @@ void ULibremidiEngineSubsystem::LogObserverInfo() const
 		return;
 	}
 
-	const libremidi::API CurrentApi = Observer->get_current_api();
-	const std::string_view ApiName = libremidi::get_api_display_name(CurrentApi);
-	const std::vector<libremidi::input_port> InputPorts = Observer->get_input_ports();
-	const std::vector<libremidi::output_port> OutputPorts = Observer->get_output_ports();
-	const int32 InputCount = static_cast<int32>(InputPorts.size());
-	const int32 OutputCount = static_cast<int32>(OutputPorts.size());
+	try
+	{
+		const libremidi::API CurrentApi = Observer->get_current_api();
+		const std::string_view ApiName = libremidi::get_api_display_name(CurrentApi);
+		const std::vector<libremidi::input_port> InputPorts = Observer->get_input_ports();
+		const std::vector<libremidi::output_port> OutputPorts = Observer->get_output_ports();
+		const int32 InputCount = static_cast<int32>(InputPorts.size());
+		const int32 OutputCount = static_cast<int32>(OutputPorts.size());
 
-	UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE observer started: API=%s Inputs=%d Outputs=%d"),
-		UTF8_TO_TCHAR(ApiName.data()), InputCount, OutputCount);
+		UE_LOG(LogLibremidi4UE, Log, TEXT("Libremidi4UE observer started: API=%s Inputs=%d Outputs=%d"),
+			UTF8_TO_TCHAR(ApiName.data()), InputCount, OutputCount);
+	}
+	catch (...)
+	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("LibremidiEngineSubsystem LogObserverInfo failed: %s"),
+			*Libremidi4UE::DescribeCurrentException());
+	}
 }
 
 #if WITH_EDITOR

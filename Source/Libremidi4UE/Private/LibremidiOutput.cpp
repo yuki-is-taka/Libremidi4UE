@@ -5,6 +5,7 @@
 #include "Libremidi4UELog.h"
 #include "LibremidiEngineSubsystem.h"
 #include "LibremidiMessage.h"
+#include "LibremidiExceptionGuard.h"
 
 THIRD_PARTY_INCLUDES_START
 #if defined(__APPLE__) // see LibremidiEngineSubsystem.h: shadow Carbon's FVector during libremidi include (UE 5.8)
@@ -16,6 +17,31 @@ THIRD_PARTY_INCLUDES_START
 #undef FVector
 #endif
 THIRD_PARTY_INCLUDES_END
+
+namespace
+{
+	// Constructing a midi_out can throw (on the Windows MIDI Services backend: C++/WinRT failures).
+	// Nothing may escape; on failure the output stays uninitialized and MIDI output stays disabled.
+	bool TryConstructMidiOut(
+		TUniquePtr<libremidi::midi_out>& OutMidiOut,
+		libremidi::output_configuration& Config,
+		libremidi::output_api_configuration& ApiConfig)
+	{
+		try
+		{
+			OutMidiOut = MakeUnique<libremidi::midi_out>(Config, ApiConfig);
+			return true;
+		}
+		catch (...)
+		{
+			OutMidiOut.Reset();
+			UE_LOG(LogLibremidi4UE, Error,
+				TEXT("LibremidiOutput: libremidi threw while creating the output: %s. MIDI output is disabled."),
+				*Libremidi4UE::DescribeCurrentException());
+			return false;
+		}
+	}
+}
 
 ULibremidiEngineSubsystem* ULibremidiOutput::GetOwnerSubsystem() const
 {
@@ -92,7 +118,10 @@ bool ULibremidiOutput::Initialize(ELibremidiMidiProtocol Protocol, ELibremidiTim
 	// parity with the input side / future schedule_message use only.
 	Config.timestamps = TimestampMode;
 
-	MidiOut = MakeUnique<libremidi::midi_out>(Config, ApiConfig);
+	if (!TryConstructMidiOut(MidiOut, Config, ApiConfig))
+	{
+		return false;
+	}
 	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiOutput created MIDI output."));
 	return MidiOut.IsValid();
 }
@@ -108,10 +137,19 @@ bool ULibremidiOutput::OpenOutput(const FLibremidiOutputInfo& PortInfo)
 	libremidi::output_port Port;
 	static_cast<libremidi::port_information&>(Port) = PortInfo.GetPort();
 	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiOutput OpenOutput: %s"), UTF8_TO_TCHAR(Port.display_name.c_str()));
-	const stdx::error Result = MidiOut->open_port(Port);
-	if (Result != stdx::error{})
+	try
 	{
-		UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiOutput OpenOutput failed for port: %s"), UTF8_TO_TCHAR(Port.display_name.c_str()));
+		const stdx::error Result = MidiOut->open_port(Port);
+		if (Result != stdx::error{})
+		{
+			UE_LOG(LogLibremidi4UE, Warning, TEXT("LibremidiOutput OpenOutput failed for port: %s"), UTF8_TO_TCHAR(Port.display_name.c_str()));
+			return false;
+		}
+	}
+	catch (...)
+	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("LibremidiOutput OpenOutput: libremidi threw for port %s: %s. The port stays closed."),
+			UTF8_TO_TCHAR(Port.display_name.c_str()), *Libremidi4UE::DescribeCurrentException());
 		return false;
 	}
 
@@ -127,7 +165,15 @@ void ULibremidiOutput::CloseOutput()
 	}
 
 	UE_LOG(LogLibremidi4UE, Log, TEXT("LibremidiOutput CloseOutput."));
-	MidiOut->close_port();
+	try
+	{
+		MidiOut->close_port();
+	}
+	catch (...)
+	{
+		UE_LOG(LogLibremidi4UE, Error, TEXT("LibremidiOutput CloseOutput: libremidi threw: %s"),
+			*Libremidi4UE::DescribeCurrentException());
+	}
 }
 
 bool ULibremidiOutput::IsPortOpen() const
