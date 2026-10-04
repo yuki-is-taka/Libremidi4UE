@@ -4,6 +4,14 @@ An Unreal Engine plugin that wraps [libremidi](https://github.com/celtera/librem
 
 libremidi is carried as a git submodule from a fork, [yuki-is-taka/libremidi](https://github.com/yuki-is-taka/libremidi) (branch `libremidi4ue`): upstream `master` plus any fixes this plugin needs that upstream does not have yet. Every pinned commit has an immutable `libremidi4ue-pin-*` tag on the fork. See [Docs/decisions/adr-0003](Docs/decisions/adr-0003-libremidi-fork-strategy.md).
 
+> **Windows MIDI Services status (October 2026)**
+>
+> On `main`, the Windows MIDI Services (MIDI 2.0 / UMP) backend is built against the out-of-band Windows MIDI Services App SDK RC4 (`Microsoft.Windows.Devices.Midi2`, 1.0.17-rc.4.25), which requires the separately installed RC4 SDK Runtime. Microsoft removed the RC4 SDK Runtime installers on 2026-10-01 and is moving the API into Windows itself as `Windows.Devices.Midi2` (expected for Windows 11 25H2 and later from late November 2026).
+>
+> On a Windows machine without the RC4 SDK Runtime, the Windows MIDI Services backend cannot be used. With the default settings (protocol `Midi2`), MIDI on Windows depends on it; set the protocol to `Midi1` in Project Settings > Plugins > Libremidi4UE to use WinMM instead. macOS and Linux are unaffected.
+>
+> Support for the in-box `Windows.Devices.Midi2` API is being developed on a separate preview branch. It will be merged into `main` after Windows ships the API in-box, so that `main` never requires Microsoft preview binaries.
+
 ## Features
 
 - **MIDI 1.0 and MIDI 2.0 (UMP)** — Dual-protocol support with separate message types, no runtime branching
