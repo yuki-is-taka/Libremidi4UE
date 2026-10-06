@@ -9,6 +9,8 @@ updated: 2026-10-03
 
 > **Superseded (2026-10-04):** [adr-0008](decisions/adr-0008-windows-midi-services-preview10-host-supplied.md) supersedes the "do nothing now" status below for the in-box port: the Preview 10 port is carried on branch `preview/winmidi-inbox`.
 
+> **Update (2026-10-06):** [adr-0009](decisions/adr-0009-in-box-windows-midi-services-baseline.md) makes the in-box port the baseline on `main` and retires the RC4 path; the branch `preview/winmidi-inbox` is merged into `main`.
+
 > **Status**: Investigation for the in-box migration and the port-identity redesign. Not a design.
 > The 2026-10 UMP fix batch is decided and designed elsewhere (§1).
 > **Scope**: Libremidi4UE's `Source/ThirdParty/WindowsMidiServices` projection + the `winmidi`
